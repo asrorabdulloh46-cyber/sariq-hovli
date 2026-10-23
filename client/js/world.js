@@ -1,6 +1,6 @@
 // Xarita ko'rinishi: teksturalar, binolar, hovli, osmon, tog'lar
 import * as THREE from '../vendor/three.module.min.js';
-import { BOXES, DECOR, PICKUPS } from '../shared/map.js';
+import { BOXES, DECOR, PICKUPS, loadMap } from '../shared/map.js';
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -95,6 +95,90 @@ function crateTex() {
   }, false);
 }
 
+function containerTex() {
+  return canvasTex(256, (g, S) => {
+    const rand = rng(61);
+    g.fillStyle = '#d9d9d9'; g.fillRect(0, 0, S, S);
+    for (let i = 0; i < 16; i++) {       // gofra qovurg'alar
+      const x = i * (S / 16);
+      g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(x, 0, S / 32, S);
+      g.fillStyle = 'rgba(255,255,255,0.28)'; g.fillRect(x + S / 32, 0, S / 64, S);
+    }
+    g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(0, 0, S, 10); g.fillRect(0, S - 10, S, 10);
+    speckle(g, S, rand, 2500, 0.22);
+    g.fillStyle = 'rgba(120,60,20,0.18)';
+    for (let i = 0; i < 18; i++) { g.fillRect(rand() * S, rand() * S, 2 + rand() * 6, 8 + rand() * 30); }
+  }, false);
+}
+
+function plasterTex() {
+  return canvasTex(256, (g, S) => {
+    const rand = rng(81);
+    g.fillStyle = '#e9dcc0'; g.fillRect(0, 0, S, S);
+    for (let i = 0; i < 40; i++) {
+      const x = rand() * S, y = rand() * S, r = 20 + rand() * 50;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, rand() < 0.5 ? 'rgba(150,120,70,0.16)' : 'rgba(255,250,230,0.18)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    speckle(g, S, rand, 3000, 0.1);
+    g.fillStyle = 'rgba(120,80,40,0.25)';                       // pastki namlik dog'i
+    g.fillRect(0, S - 26, S, 26);
+  });
+}
+function hayTex() {
+  return canvasTex(128, (g, S) => {
+    const rand = rng(91);
+    g.fillStyle = '#d8b650'; g.fillRect(0, 0, S, S);
+    for (let i = 0; i < 260; i++) {
+      g.strokeStyle = `rgba(${150 + rand() * 90},${110 + rand() * 70},${30 + rand() * 40},${0.4 + rand() * 0.4})`;
+      g.lineWidth = 1 + rand() * 1.5; g.beginPath();
+      const x = rand() * S, y = rand() * S; g.moveTo(x, y); g.lineTo(x + (rand() - 0.5) * 30, y + (rand() - 0.5) * 8); g.stroke();
+    }
+    g.strokeStyle = 'rgba(80,50,20,0.7)'; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(0, S * 0.3); g.lineTo(S, S * 0.3); g.moveTo(0, S * 0.7); g.lineTo(S, S * 0.7); g.stroke();
+  });
+}
+function plankTex() {
+  return canvasTex(128, (g, S) => {
+    const rand = rng(97);
+    for (let i = 0; i < 4; i++) {
+      const l = (rand() - 0.5) * 20;
+      g.fillStyle = `rgb(${150 + l},${105 + l * 0.8},${62 + l * 0.5})`; g.fillRect(0, i * 32, S, 31);
+      g.fillStyle = 'rgba(40,24,8,0.5)'; g.fillRect(0, i * 32 + 30, S, 2);
+    }
+    speckle(g, S, rand, 500, 0.14);
+  });
+}
+function stoneTex() {
+  return canvasTex(128, (g, S) => {
+    const rand = rng(53);
+    g.fillStyle = '#8d8a82'; g.fillRect(0, 0, S, S);
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+      const l = (rand() - 0.5) * 36, o = (r % 2) * 16;
+      g.fillStyle = `rgb(${140 + l},${136 + l},${126 + l})`; g.fillRect(c * 32 + o + 1, r * 32 + 1, 30, 30);
+    }
+    speckle(g, S, rand, 600, 0.14);
+  });
+}
+function cloudTex() {
+  return canvasTex(128, (g, S) => {
+    for (let i = 0; i < 14; i++) {
+      const x = 24 + Math.random() * 80, y = 54 + (Math.random() - 0.5) * 22, r = 16 + Math.random() * 22;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, 'rgba(255,255,255,0.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+  }, false);
+}
+export function shadowTexture() {
+  return canvasTex(64, (g, S) => {
+    const gr = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.25)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, S, S);
+  }, false);
+}
+
 // ---- Quti geometriyasi (UV dunyo koordinatalarida, vertex rang bilan soya) ----
 const FACES = [
   { n: [1, 0, 0], v: (b) => [[b.maxx, b.miny, b.maxz], [b.maxx, b.miny, b.minz], [b.maxx, b.maxy, b.minz], [b.maxx, b.maxy, b.maxz]], uv: [2, 1], shade: 0.78 },
@@ -146,33 +230,75 @@ function glowTex() {
 
 export function buildWorld() {
   const scene = new THREE.Scene();
-  const FOG = 0xead8a8;
+  const FOG = 0xcfe6f6;   // doim ochiq, quyoshli havo
   scene.background = new THREE.Color(FOG);
-  scene.fog = new THREE.Fog(FOG, 70, 280);
+  scene.fog = new THREE.Fog(FOG, 110, 420);
 
-  scene.add(new THREE.HemisphereLight(0xcfe3ff, 0xc9a55c, 1.05));
-  const sun = new THREE.DirectionalLight(0xfff0cf, 1.55);
+  scene.add(new THREE.HemisphereLight(0xdcefff, 0xd9bd78, 1.2));
+  const sun = new THREE.DirectionalLight(0xfff4d8, 1.85);
   sun.position.set(-40, 70, 25); scene.add(sun);
 
   const matBrick = new THREE.MeshLambertMaterial({ map: brickTex(), vertexColors: true });
   const matSlab = new THREE.MeshLambertMaterial({ map: slabTex(), vertexColors: true });
   const matCrate = new THREE.MeshLambertMaterial({ map: crateTex(), vertexColors: true });
+  const matCont = new THREE.MeshLambertMaterial({ map: containerTex(), vertexColors: true });
   const matPlain = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const matPlaster = new THREE.MeshLambertMaterial({ map: plasterTex(), vertexColors: true });
+  const matHay = new THREE.MeshLambertMaterial({ map: hayTex(), vertexColors: true });
+  const matPlank = new THREE.MeshLambertMaterial({ map: plankTex(), vertexColors: true });
+  const matStone = new THREE.MeshLambertMaterial({ map: stoneTex(), vertexColors: true });
 
-  const by = (k) => BOXES.filter((b) => b.kind === k);
-  const walls = new THREE.Mesh(buildGeo(by('wall'), { tile: 2, color: [1, 0.97, 0.9], seed: 3 }), matBrick);
-  const perim = new THREE.Mesh(buildGeo(by('perim'), { tile: 2, color: [0.85, 0.78, 0.62], seed: 4 }), matBrick);
-  const slabs = new THREE.Mesh(buildGeo(by('slab'), { tile: 2, color: [1, 1, 1], seed: 5, ao: false }), matSlab);
-  const stairs = new THREE.Mesh(buildGeo(by('stair'), { tile: 2, color: [0.88, 0.85, 0.78], seed: 6, ao: false }), matSlab);
-  const crates = new THREE.Mesh(buildGeo(by('crate'), { local: true, color: [1, 1, 1], seed: 7, ao: false }), matCrate);
-  scene.add(walls, perim, slabs, stairs, crates);
+  // har bir "kind" uchun: [material, geometriya sozlamalari]
+  const KIND = {
+    wall: [matBrick, { tile: 2, color: [1, 0.97, 0.9], seed: 3 }],
+    perim: [matBrick, { tile: 2, color: [0.85, 0.78, 0.62], seed: 4 }],
+    slab: [matSlab, { tile: 2, color: [1, 1, 1], seed: 5, ao: false }],
+    stair: [matSlab, { tile: 2, color: [0.88, 0.85, 0.78], seed: 6, ao: false }],
+    crate: [matCrate, { local: true, color: [1, 1, 1], seed: 7, ao: false }],
+    lowwall: [matBrick, { tile: 2, color: [0.95, 0.88, 0.78], seed: 8, ao: false }],
+    barrier: [matSlab, { tile: 2, color: [0.78, 0.78, 0.76], seed: 10, ao: false }],
+    mound: [matPlain, { color: [0.8, 0.62, 0.32], seed: 12, ao: false }],
+    cont0: [matCont, { local: true, color: [0.78, 0.25, 0.2], seed: 13, ao: false }],
+    cont1: [matCont, { local: true, color: [0.22, 0.42, 0.7], seed: 14, ao: false }],
+    cont2: [matCont, { local: true, color: [0.28, 0.55, 0.34], seed: 15, ao: false }],
+    house: [matPlaster, { tile: 3, color: [1, 0.97, 0.9], seed: 16 }],
+    roof: [matSlab, { tile: 2, color: [0.78, 0.5, 0.38], seed: 17, ao: false }],
+    hay: [matHay, { local: true, color: [1, 1, 1], seed: 18, ao: false }],
+    fence: [matPlank, { tile: 1.5, color: [1, 1, 1], seed: 19, ao: false }],
+    well: [matStone, { tile: 1, color: [1, 1, 1], seed: 20, ao: false }],
+  };
+  const DECOR_COLOR = { trim: [0.46, 0.31, 0.18], awning: [0.62, 0.2, 0.17], tank: [0.5, 0.55, 0.58], roofedge: [0.55, 0.34, 0.26], wood: [0.45, 0.3, 0.16] };
 
-  // bezaklar (to'qnashmaydi)
-  const colorOf = { trim: [0.46, 0.31, 0.18], awning: [0.62, 0.2, 0.17], tank: [0.5, 0.55, 0.58] };
-  for (const k of Object.keys(colorOf)) {
-    const list = DECOR.filter((b) => b.kind === k);
-    if (list.length) scene.add(new THREE.Mesh(buildGeo(list, { color: colorOf[k], seed: 9, ao: false }), matPlain));
-  }
+  // xaritaga bog'liq qism (binolar, yashiklar, dori qutilari): xarita almashganda qayta quriladi
+  const mapGroup = new THREE.Group(); scene.add(mapGroup);
+  const api = { scene, pickups: [], mapId: -1 };
+  const pickBase = new THREE.MeshLambertMaterial({ color: 0xf5f5f5 });
+  const pickCross = new THREE.MeshBasicMaterial({ color: 0x2e9e3e });
+  const pickGeo = [new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.BoxGeometry(0.32, 0.1, 0.52), new THREE.BoxGeometry(0.1, 0.32, 0.52)];
+
+  api.setMap = (id) => {
+    id = loadMap(id);
+    if (api.mapId === id) return id;
+    api.mapId = id;
+    for (const ch of [...mapGroup.children]) { mapGroup.remove(ch); if (ch.geometry && !pickGeo.includes(ch.geometry)) ch.geometry.dispose(); }
+    for (const k of Object.keys(KIND)) {
+      const list = BOXES.filter((b) => b.kind === k);
+      if (list.length) mapGroup.add(new THREE.Mesh(buildGeo(list, KIND[k][1]), KIND[k][0]));
+    }
+    for (const k of Object.keys(DECOR_COLOR)) {
+      const list = DECOR.filter((b) => b.kind === k);
+      if (list.length) mapGroup.add(new THREE.Mesh(buildGeo(list, { color: DECOR_COLOR[k], seed: 9, ao: false }), matPlain));
+    }
+    // dori qutilari
+    api.pickups = PICKUPS.map((pos) => {
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(pickGeo[0], pickBase), new THREE.Mesh(pickGeo[1], pickCross), new THREE.Mesh(pickGeo[2], pickCross));
+      g.position.set(pos.x, pos.y + 0.75, pos.z); g.userData.y0 = pos.y;
+      mapGroup.add(g);
+      return g;
+    });
+    return id;
+  };
 
   // yer
   const gt = groundTex(); gt.repeat.set(60, 60);
@@ -183,22 +309,33 @@ export function buildWorld() {
   const skyG = new THREE.SphereGeometry(400, 24, 14);
   const sc = [];
   const p = skyG.attributes.position;
-  const top = new THREE.Color(0x5fa6e6), hor = new THREE.Color(FOG), c = new THREE.Color();
+  const top = new THREE.Color(0x2f86e8), hor = new THREE.Color(0xa8d4f5), c = new THREE.Color();
   for (let i = 0; i < p.count; i++) {
     const t = Math.max(0, p.getY(i) / 400);
-    c.copy(hor).lerp(top, Math.pow(t, 0.55)); sc.push(c.r, c.g, c.b);
+    c.copy(hor).lerp(top, Math.pow(t, 0.5)); sc.push(c.r, c.g, c.b);
   }
   skyG.setAttribute('color', new THREE.Float32BufferAttribute(sc, 3));
   const sky = new THREE.Mesh(skyG, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
   sky.renderOrder = -2; scene.add(sky);
   const sunSpr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
-  sunSpr.scale.set(120, 120, 1); sunSpr.position.set(-40, 70, 25).normalize().multiplyScalar(350); sunSpr.renderOrder = -1;
+  sunSpr.scale.set(170, 170, 1); sunSpr.position.set(-40, 70, 25).normalize().multiplyScalar(350); sunSpr.renderOrder = -1;
   scene.add(sunSpr);
+
+  // yengil bulutlar (shamolda sekin suzadi)
+  const cloudMat = new THREE.SpriteMaterial({ map: cloudTex(), fog: false, depthWrite: false, transparent: true, opacity: 0.9 });
+  const clouds = [];
+  for (let i = 0; i < 9; i++) {
+    const sp = new THREE.Sprite(cloudMat);
+    const a = (i / 9) * Math.PI * 2 + Math.random() * 0.5, e = 0.28 + Math.random() * 0.45;
+    sp.userData = { a, e, sp: 0.004 + Math.random() * 0.004 };
+    const w = 90 + Math.random() * 90; sp.scale.set(w, w * 0.4, 1); sp.renderOrder = -1;
+    scene.add(sp); clouds.push(sp);
+  }
 
   // uzoqdagi tog'lar
   const mr = rng(77);
-  const mm = new THREE.MeshLambertMaterial({ color: 0xb98d52, flatShading: true });
-  const mm2 = new THREE.MeshLambertMaterial({ color: 0xa57a45, flatShading: true });
+  const mm = new THREE.MeshLambertMaterial({ color: 0xc9a066, flatShading: true });
+  const mm2 = new THREE.MeshLambertMaterial({ color: 0xb98d56, flatShading: true });
   for (let i = 0; i < 30; i++) {
     const a = (i / 30) * Math.PI * 2 + mr() * 0.15, d = 190 + mr() * 50;
     const h = 22 + mr() * 50, r = 30 + mr() * 40;
@@ -206,18 +343,15 @@ export function buildWorld() {
     m.position.set(Math.cos(a) * d, h / 2 - 1, Math.sin(a) * d); m.rotation.y = mr() * 6; scene.add(m);
   }
 
-  // dori qutilari
-  const pickups = PICKUPS.map((pos) => {
-    const g = new THREE.Group();
-    const base = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshLambertMaterial({ color: 0xf5f5f5 }));
-    const crossM = new THREE.MeshBasicMaterial({ color: 0x2e9e3e });
-    const c1 = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.1, 0.52), crossM);
-    const c2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.32, 0.52), crossM);
-    g.add(base, c1, c2);
-    g.position.set(pos.x, pos.y + 0.75, pos.z);
-    scene.add(g);
-    return g;
-  });
-
-  return { scene, sky, sunSpr, pickups };
+  api.sky = sky; api.sunSpr = sunSpr; api.clouds = clouds;
+  api.update = (t, camPos) => {
+    sky.position.copy(camPos);
+    sunSpr.position.set(-40, 70, 25).normalize().multiplyScalar(350).add(camPos);
+    for (const c of clouds) {
+      const u = c.userData, a = u.a + t * u.sp;
+      c.position.set(Math.cos(a) * 330 * Math.cos(u.e), 330 * Math.sin(u.e) + 20, Math.sin(a) * 330 * Math.cos(u.e)).add(camPos);
+    }
+  };
+  api.setMap(0);
+  return api;
 }
