@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#c9a45c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>Sariq Hovli</title>
+<style>
+  :root { --sand:#e8d5a3; --dark:#2a2118; --accent:#ffb300; --safe-l:env(safe-area-inset-left,0px); --safe-r:env(safe-area-inset-right,0px); --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px); }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none; user-select:none; -webkit-user-select:none; }
+  html,body { margin:0; height:100%; overflow:hidden; background:#000; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:#fff; touch-action:none; overscroll-behavior:none; }
+  #c { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  .hide { display:none !important; }
+
+  /* ---------- HUD ---------- */
+  #hud { position:fixed; inset:0; pointer-events:none; }
+  #crosshair { position:absolute; left:50%; top:50%; width:0; height:0; }
+  #crosshair i { position:absolute; background:#fff; box-shadow:0 0 2px #000; }
+  #crosshair i:nth-child(1){ width:2px; height:9px; left:-1px; top:-17px; }
+  #crosshair i:nth-child(2){ width:2px; height:9px; left:-1px; top:8px; }
+  #crosshair i:nth-child(3){ width:9px; height:2px; top:-1px; left:-17px; }
+  #crosshair i:nth-child(4){ width:9px; height:2px; top:-1px; left:8px; }
+  #crosshair b { position:absolute; left:-1.5px; top:-1.5px; width:3px; height:3px; border-radius:50%; background:#fff; box-shadow:0 0 2px #000; }
+  #hitm { position:absolute; left:50%; top:50%; width:34px; height:34px; margin:-17px 0 0 -17px; opacity:0; transition:opacity .12s; }
+  #hitm::before,#hitm::after { content:""; position:absolute; left:50%; top:-4px; width:3px; height:42px; background:#fff; box-shadow:0 0 3px #000; transform:translateX(-50%) rotate(45deg); }
+  #hitm::after { transform:translateX(-50%) rotate(-45deg); }
+  #hitm.head::before,#hitm.head::after,#hitm.kill::before,#hitm.kill::after { background:#ff3b30; }
+  #hitm.on { opacity:1; transition:none; }
+  #scope { position:absolute; inset:0; background:radial-gradient(circle at 50% 50%, transparent 0, transparent 30vh, #000 30.4vh); }
+  #scope::before { content:""; position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(0,0,0,.8); }
+  #scope::after { content:""; position:absolute; top:0; bottom:0; left:50%; width:1px; background:rgba(0,0,0,.8); }
+  #dmgflash { position:absolute; inset:0; background:radial-gradient(ellipse at center, transparent 45%, rgba(255,0,0,.55) 100%); opacity:0; transition:opacity .4s; }
+  #dmgflash.on { opacity:1; transition:none; }
+  #dmgdir { position:absolute; left:50%; top:50%; width:0; height:0; opacity:0; transition:opacity .6s; }
+  #dmgdir.on { opacity:1; transition:none; }
+  #dmgdir i { position:absolute; left:-60px; top:-150px; width:120px; height:26px; border-radius:50%; background:radial-gradient(ellipse at center, rgba(255,40,40,.95), rgba(255,40,40,0) 70%); }
+
+  #topc { position:absolute; top:calc(6px + var(--safe-t)); left:50%; transform:translateX(-50%); text-align:center; text-shadow:0 1px 3px #000; }
+  #timer { font-size:22px; font-weight:800; letter-spacing:1px; background:rgba(0,0,0,.35); padding:2px 14px; border-radius:10px; }
+  #goal { font-size:11px; opacity:.85; margin-top:2px; }
+  #score { position:absolute; top:calc(6px + var(--safe-t)); right:calc(10px + var(--safe-r)); min-width:150px; background:rgba(0,0,0,.38); border-radius:10px; padding:5px 8px; font-size:12px; line-height:1.5; }
+  #score div { display:flex; align-items:center; gap:6px; white-space:nowrap; }
+  #score .nm { flex:1; } #score .me { font-weight:800; color:var(--accent); } #score .kd { font-variant-numeric:tabular-nums; opacity:.95; }
+  .dot { width:9px; height:9px; border-radius:50%; display:inline-block; flex:none; }
+  #stats { position:absolute; top:calc(6px + var(--safe-t)); left:calc(10px + var(--safe-l)); font-size:11px; opacity:.75; text-shadow:0 1px 2px #000; }
+  #feed { position:absolute; top:calc(30px + var(--safe-t)); left:calc(10px + var(--safe-l)); font-size:12px; text-shadow:0 1px 3px #000; display:flex; flex-direction:column; gap:3px; }
+  #feed div { background:rgba(0,0,0,.4); padding:2px 8px; border-radius:6px; width:max-content; animation:fin .2s; }
+  @keyframes fin { from{opacity:0; transform:translateX(-10px);} to{opacity:1; transform:none;} }
+  #vitals { position:absolute; left:50%; bottom:calc(8px + var(--safe-b)); transform:translateX(-50%); display:flex; align-items:flex-end; gap:12px; text-shadow:0 1px 3px #000; }
+  #hpwrap { width:150px; }
+  #hptxt { font-size:12px; font-weight:700; margin-bottom:2px; display:flex; justify-content:space-between; }
+  #hpbar { height:12px; background:rgba(0,0,0,.5); border-radius:7px; overflow:hidden; border:1px solid rgba(255,255,255,.25); }
+  #hpfill { height:100%; width:100%; background:linear-gradient(90deg,#43a047,#9ccc65); transition:width .15s; }
+  #hpfill.low { background:linear-gradient(90deg,#c62828,#ef5350); }
+  #ammo { text-align:right; min-width:90px; }
+  #ammo .n { font-size:26px; font-weight:800; line-height:1; } #ammo .w { font-size:11px; opacity:.85; }
+  #slots { display:flex; gap:5px; pointer-events:auto; }
+  .slot { width:40px; height:34px; border-radius:8px; background:rgba(0,0,0,.45); border:2px solid rgba(255,255,255,.2); display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:9px; line-height:1.1; }
+  .slot b { font-size:13px; } .slot.act { border-color:var(--accent); background:rgba(255,179,0,.25); }
+  #reloadbar { position:absolute; left:50%; top:58%; width:120px; height:5px; margin-left:-60px; background:rgba(0,0,0,.5); border-radius:3px; overflow:hidden; opacity:0; }
+  #reloadbar i { display:block; height:100%; width:0; background:#fff; }
+  #msg { position:absolute; left:50%; top:22%; transform:translateX(-50%); font-size:16px; font-weight:700; text-shadow:0 1px 4px #000; text-align:center; }
+  #inv { position:absolute; left:50%; top:calc(62px + var(--safe-t)); transform:translateX(-50%); font-size:12px; color:#8ef; text-shadow:0 1px 3px #000; }
+  #conn { position:absolute; left:50%; top:42%; transform:translateX(-50%); background:rgba(0,0,0,.7); padding:10px 18px; border-radius:12px; font-size:14px; }
+
+  #dead, #endscreen { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; text-shadow:0 2px 6px #000; }
+  #dead { background:rgba(120,0,0,.28); }
+  #dead h2 { margin:0 0 6px; font-size:28px; } #dead p { margin:3px 0; font-size:15px; }
+  #endscreen { background:rgba(0,0,0,.62); }
+  #endscreen h2 { margin:0 0 8px; font-size:30px; color:var(--accent); }
+  #endscreen table { border-collapse:collapse; font-size:16px; margin:8px 0; }
+  #endscreen td { padding:4px 14px; } #endscreen tr.w td { color:var(--accent); font-weight:800; }
+
+  /* ---------- Sensorli boshqaruv ---------- */
+  #touch { position:absolute; inset:0; pointer-events:none; }
+  .tb { position:absolute; border-radius:50%; background:rgba(255,255,255,.14); border:2px solid rgba(255,255,255,.4); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; pointer-events:auto; text-shadow:0 1px 2px #000; }
+  .tb.down { background:rgba(255,179,0,.4); }
+  #bFire { width:92px; height:92px; right:calc(34px + var(--safe-r)); bottom:calc(64px + var(--safe-b)); background:rgba(255,60,40,.28); border-color:rgba(255,120,100,.7); font-size:15px; }
+  #bJump { width:62px; height:62px; right:calc(140px + var(--safe-r)); bottom:calc(26px + var(--safe-b)); }
+  #bReload { width:54px; height:54px; right:calc(24px + var(--safe-r)); bottom:calc(170px + var(--safe-b)); font-size:11px; }
+  #bZoom { width:54px; height:54px; right:calc(100px + var(--safe-r)); bottom:calc(150px + var(--safe-b)); font-size:11px; }
+  #bMenu { width:36px; height:36px; left:calc(50% + 90px); top:calc(8px + var(--safe-t)); font-size:16px; border-radius:10px; }
+  #joyBase { position:absolute; width:120px; height:120px; margin:-60px 0 0 -60px; border-radius:50%; background:rgba(255,255,255,.1); border:2px solid rgba(255,255,255,.3); opacity:0; }
+  #joyKnob { position:absolute; left:50%; top:50%; width:54px; height:54px; margin:-27px 0 0 -27px; border-radius:50%; background:rgba(255,255,255,.35); }
+
+  /* ---------- Menyu ---------- */
+  #menu { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:
+      radial-gradient(ellipse at 50% 50%, rgba(30,18,6,.55), rgba(15,9,3,.82)); overflow:auto; padding:10px; touch-action:pan-y; }
+  #menu.over { background:rgba(10,6,2,.78); }
+  .card { width:min(560px,100%); max-height:100%; overflow:auto; text-align:center; padding:14px 18px; }
+  h1 { margin:0; font-size:clamp(30px,7vw,52px); letter-spacing:3px; color:var(--sand); text-shadow:0 3px 0 #7a5a1c, 0 6px 14px #000; }
+  .sub { margin:2px 0 12px; color:#d6bd85; font-size:13px; }
+  .names { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin:8px 0; }
+  .nb { padding:10px 14px; border-radius:12px; border:2px solid transparent; font-size:16px; font-weight:700; color:#fff; min-width:104px; cursor:pointer; opacity:.9; }
+  .nb.sel { border-color:#fff; transform:scale(1.06); opacity:1; box-shadow:0 0 14px rgba(255,255,255,.45); }
+  .nb.taken { opacity:.3; text-decoration:line-through; cursor:not-allowed; }
+  .row { display:flex; align-items:center; gap:8px; justify-content:center; margin:8px 0; font-size:13px; color:#e8d5a3; flex-wrap:wrap; }
+  .row input[type=text] { padding:9px 10px; border-radius:9px; border:1px solid #8a6b2a; background:#241a0d; color:#fff; font-size:14px; width:min(320px,90%); user-select:text; -webkit-user-select:text; }
+  select, .row input[type=range] { background:#241a0d; color:#fff; border:1px solid #8a6b2a; border-radius:8px; padding:6px; }
+  .big { display:inline-block; margin-top:10px; padding:14px 40px; font-size:20px; font-weight:800; border:0; border-radius:14px; background:linear-gradient(#ffc83d,#e59a00); color:#2a1a00; cursor:pointer; box-shadow:0 4px 0 #8a5a00, 0 8px 18px rgba(0,0,0,.5); }
+  .big:disabled { filter:grayscale(1); opacity:.5; }
+  .ghost { padding:9px 18px; font-size:14px; border-radius:10px; border:1px solid #8a6b2a; background:transparent; color:#e8d5a3; cursor:pointer; margin:4px; }
+  #status { min-height:18px; font-size:13px; margin:6px 0; color:#ffd56b; }
+  #err { color:#ff8a80; min-height:16px; font-size:13px; }
+  .help { font-size:12px; color:#bfa86f; line-height:1.55; margin-top:10px; }
+  @media (max-height:480px) {
+    h1 { font-size:30px; letter-spacing:2px; } .sub { margin:0 0 4px; font-size:12px; }
+    .card { padding:4px 12px; } .names { margin:4px 0; gap:6px; } .nb { padding:7px 10px; font-size:14px; min-width:84px; }
+    .big { padding:10px 34px; font-size:18px; margin-top:2px; } .row { margin:4px 0; } .help { margin-top:4px; font-size:11px; }
+    #status { margin:2px 0; min-height:16px; } #menu { align-items:flex-start; }
+  }
+  kbd { background:#3a2c17; border:1px solid #6a5026; border-radius:4px; padding:0 5px; font-size:11px; color:#fff; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud" class="hide">
+  <div id="scope" class="hide"></div>
+  <div id="dmgflash"></div>
+  <div id="dmgdir"><i></i></div>
+  <div id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
+  <div id="hitm"></div>
+  <div id="stats"></div>
+  <div id="feed"></div>
+  <div id="topc"><div id="timer">5:00</div><div id="goal"></div></div>
+  <div id="score"></div>
+  <div id="inv" class="hide">🛡 Himoya</div>
+  <div id="msg"></div>
+  <div id="reloadbar"><i></i></div>
+  <div id="vitals">
+    <div id="hpwrap"><div id="hptxt"><span id="myname"></span><span id="hpnum">100</span></div><div id="hpbar"><div id="hpfill"></div></div></div>
+    <div id="slots"></div>
+    <div id="ammo"><div class="n" id="ammon">30</div><div class="w" id="ammow"></div></div>
+  </div>
+  <div id="dead" class="hide"><h2>Siz yiqildingiz</h2><p id="deadby"></p><p id="deadcd"></p></div>
+  <div id="endscreen" class="hide"></div>
+  <div id="conn" class="hide">Aloqa uzildi. Qayta ulanmoqda…</div>
+  <div id="touch" class="hide">
+    <div id="joyBase"><div id="joyKnob"></div></div>
+    <div class="tb" id="bFire">OTISH</div>
+    <div class="tb" id="bJump">SAKRA</div>
+    <div class="tb" id="bReload">ZARYAD</div>
+    <div class="tb hide" id="bZoom">ZOOM</div>
+    <div class="tb" id="bMenu">☰</div>
+  </div>
+</div>
+
+<div id="menu">
+  <div class="card">
+    <h1>SARIQ HOVLI</h1>
+    <div class="sub">5 kishilik onlayn 3D otishma · har kim o'zi uchun</div>
+
+    <div id="panelJoin">
+      <div style="font-size:14px;color:#e8d5a3">Ismingizni tanlang:</div>
+      <div class="names" id="names"></div>
+      <div id="srvrow" class="row hide"><span>Server:</span><input type="text" id="srv" placeholder="masalan: sariq-hovli.onrender.com" autocapitalize="off" autocomplete="off" spellcheck="false"><button class="ghost" id="srvok">Ulash</button></div>
+      <div id="status">Serverga ulanmoqda…</div>
+      <div id="err"></div>
+      <button class="big" id="play" disabled>O'YNASH</button>
+      <div class="row">
+        <label>Sezgirlik <input type="range" id="sens" min="0.4" max="2.5" step="0.05"></label>
+        <label>Sifat <select id="qual"><option value="low">Past</option><option value="mid">O'rta</option><option value="high">Yuqori</option></select></label>
+        <label><input type="checkbox" id="fpsck"> FPS/ping</label>
+      </div>
+      <div class="help" id="helpPC">
+        <kbd>W A S D</kbd> yurish · sichqoncha — qarash · <kbd>Chap tugma</kbd> otish · <kbd>O'ng tugma</kbd> snayper zoom<br>
+        <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> qurol · <kbd>R</kbd> zaryad · <kbd>Space</kbd> sakrash · <kbd>Tab</kbd> hisob
+      </div>
+      <div class="help hide" id="helpTouch">Chap tomon — joystik · o'ng tomonni sudrab — qarash · qizil tugma — otish</div>
+    </div>
+
+    <div id="panelPause" class="hide">
+      <h2 style="color:#e8d5a3;margin:8px 0">Pauza</h2>
+      <div class="row">
+        <label>Sezgirlik <input type="range" id="sens2" min="0.4" max="2.5" step="0.05"></label>
+        <label>Sifat <select id="qual2"><option value="low">Past</option><option value="mid">O'rta</option><option value="high">Yuqori</option></select></label>
+      </div>
+      <button class="big" id="resume">DAVOM ETISH</button><br>
+      <button class="ghost" id="leave">O'yindan chiqish</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="game.js"></script>
+</body>
+</html>

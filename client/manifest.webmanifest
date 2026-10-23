@@ -1,0 +1,11 @@
+{
+  "name": "Sariq Hovli",
+  "short_name": "Sariq Hovli",
+  "description": "5 kishilik onlayn 3D otishma o'yini",
+  "start_url": ".",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#1b130a",
+  "theme_color": "#c9a45c",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

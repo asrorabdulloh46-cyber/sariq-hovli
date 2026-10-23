@@ -1,0 +1,20 @@
+{
+  "name": "sariq-hovli",
+  "version": "1.0.0",
+  "description": "Sariq Hovli - 5 kishilik onlayn 3D shooter",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node test/physics-test.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "three": "0.160.0"
+  }
+}

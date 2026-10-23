@@ -1,0 +1,8 @@
+{
+  "appId": "uz.sariqhovli.app",
+  "appName": "Sariq Hovli",
+  "webDir": "www",
+  "backgroundColor": "#1b130a",
+  "server": { "androidScheme": "http", "cleartext": true },
+  "android": { "allowMixedContent": true, "backgroundColor": "#1b130a" }
+}

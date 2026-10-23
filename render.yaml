@@ -1,0 +1,9 @@
+# Render.com uchun (bepul tarif). GitHub repo'ni Render'ga ulasangiz, shu fayl avtomatik o'qiladi.
+services:
+  - type: web
+    name: sariq-hovli
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: node server/server.js
+    healthCheckPath: /healthz
