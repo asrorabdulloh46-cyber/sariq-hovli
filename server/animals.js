@@ -1,6 +1,6 @@
 // Hayvonlar (buqa va cho'chqa): maydonda erkin yuradi. Buqa yaqin kelganni suzadi, cho'chqa o'qdan qochadi.
 import { BOXES, ARENA, ANIMAL_SPAWNS } from '../client/shared/map.js';
-import { ANIMALS, ANIMAL_RESPAWN_MS } from '../client/shared/consts.js';
+import { ANIMALS, ANIMAL_RESPAWN_MS, AS } from '../client/shared/consts.js';
 
 export const animals = [];
 
@@ -28,7 +28,8 @@ export function resetAnimals(now) {
 
 export function animalBox(a) {
   const d = ANIMALS[a.t];
-  return { minx: a.x - d.half, miny: 0, minz: a.z - d.half, maxx: a.x + d.half, maxy: d.h, maxz: a.z + d.half };
+  const hh = d.half * AS, ht = d.h * AS;   // model kattalashtirilgan, zarba qutisi ham shunga mos
+  return { minx: a.x - hh, miny: 0, minz: a.z - hh, maxx: a.x + hh, maxy: ht, maxz: a.z + hh };
 }
 
 // qaysi tomonga qarasa shunday "yaw": oldinga = (-sin(yaw), -cos(yaw))

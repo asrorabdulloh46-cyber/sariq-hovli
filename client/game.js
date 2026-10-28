@@ -1,7 +1,7 @@
 // SARIQ HOVLI v3 - asosiy klient: tarmoq, boshqaruv, otish, HUD, do'kon, granata, hayvonlar
 import * as THREE from './vendor/three.module.min.js';
 import { NAMES, COLORS, WEAPONS, GRENADES, GREN_MAX, MODES, ANIMALS, EYE, EYE_C, CROUCH_SPEED, LOW_GRAV, MAX_HP, KILL_LIMIT,
-  ROUND_SEC, ARMOR_PRICE, HELMET_PRICE, W_SNIPER } from './shared/consts.js';
+  ROUND_SEC, ARMOR_PRICE, HELMET_PRICE, W_SNIPER, PS, AS } from './shared/consts.js';
 import { MAP_NAMES, MAP_DESC, MAP_COUNT, raycastWorld } from './shared/map.js';
 import { stepPlayer } from './shared/physics.js';
 import { buildWorld, shadowTexture } from './js/world.js';
@@ -148,8 +148,8 @@ function getOther(id) {
   let o = others.get(id);
   if (!o) {
     const model = createPlayerModel(id, NAMES[id]);
-    scene.add(model.root);
-    const sh = makeShadow(1.3); scene.add(sh);
+    model.root.scale.setScalar(PS); scene.add(model.root);
+    const sh = makeShadow(1.3 * PS); scene.add(sh);
     // o'qiga qarshi ko'rinadigan o't olish yorug'i
     const flashes = model.guns.map((g) => {
       const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -216,8 +216,8 @@ function getAnimal(id, type) {
   if (!a || a.type !== type) {
     if (a) { scene.remove(a.model); scene.remove(a.shadow); }
     const model = createAnimalModel(type);
-    scene.add(model);
-    const sh = makeShadow(type === 0 ? 2.6 : 1.4); scene.add(sh);
+    model.scale.setScalar(AS); scene.add(model);
+    const sh = makeShadow((type === 0 ? 2.6 : 1.4) * AS); scene.add(sh);
     const cv = hpSpriteTex(), tex = new THREE.CanvasTexture(cv);
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false }));
     sp.scale.set(1.0, 0.125, 1); sp.position.set(0, type === 0 ? 2.1 : 1.15, 0); sp.visible = false; sp.renderOrder = 5; model.add(sp);
@@ -639,18 +639,18 @@ function buildShop() {
   const items = (arr) => arr.join('');
   const w = [2, 3, 4].map((i) => {
     const wd = WEAPONS[i], own = me.own[i], no = !own && me.money < wd.price;
-    return `<div class="item${own ? ' own' : ''}${no ? ' no' : ''}" data-k="w" data-i="${i}"><div class="ic">${SHOP_ICONS[i]}</div><div class="nm">${wd.name}</div>
-      <div class="ds">zarar ${wd.dmg}${wd.pellets > 1 ? '×' + wd.pellets : ''} · ${wd.mag} o'q</div><div class="pr">${own ? 'Sizda bor' : '$' + wd.price}</div></div>`;
+    return `<div class="item${own && wd.price > 0 ? ' own' : ''}${no ? ' no' : ''}" data-k="w" data-i="${i}"><div class="ic">${SHOP_ICONS[i]}</div><div class="nm">${wd.name}</div>
+      <div class="ds">zarar ${wd.dmg}${wd.pellets > 1 ? '×' + wd.pellets : ''} · ${wd.mag} o'q</div><div class="pr">${wd.price > 0 ? (own ? 'Sizda bor' : '$' + wd.price) : (own ? 'BEPUL · to\'ldirish' : 'BEPUL')}</div></div>`;
   });
   const g = GRENADES.map((gd, i) => {
     const full = me.gren[i] >= GREN_MAX, no = !full && me.money < gd.price;
-    return `<div class="item${full ? ' own' : ''}${no ? ' no' : ''}" data-k="g" data-i="${i}"><div class="ic">${['💣', '☁️', '✨'][i]}</div><div class="nm">${gd.name}</div>
-      <div class="ds">${['portlash, 6.5 m', 'ko\'rishni to\'sadi', 'ko\'zni qamashtiradi'][i]}</div><div class="pr">$${gd.price} · ${me.gren[i]}/${GREN_MAX}</div></div>`;
+    return `<div class="item${full && gd.price > 0 ? ' own' : ''}${no ? ' no' : ''}" data-k="g" data-i="${i}"><div class="ic">${['💣', '☁️', '✨'][i]}</div><div class="nm">${gd.name}</div>
+      <div class="ds">${['portlash, 6.5 m', 'ko\'rishni to\'sadi', 'ko\'zni qamashtiradi'][i]}</div><div class="pr">${gd.price > 0 ? '$' + gd.price + ' · ' + me.gren[i] + '/' + GREN_MAX : (full ? 'BEPUL · ∞' : 'BEPUL')}</div></div>`;
   });
   const armOwn = me.armor >= 100, helOwn = !!me.helmet;
   const eq = [
-    `<div class="item${armOwn ? ' own' : ''}${!armOwn && me.money < ARMOR_PRICE ? ' no' : ''}" data-k="armor"><div class="ic">🦺</div><div class="nm">Zirh</div><div class="ds">zararning yarmini yutadi</div><div class="pr">${armOwn ? 'To\'liq' : '$' + ARMOR_PRICE}</div></div>`,
-    `<div class="item${helOwn ? ' own' : ''}${!helOwn && me.money < HELMET_PRICE ? ' no' : ''}" data-k="helmet"><div class="ic">⛑</div><div class="nm">Dubulg'a</div><div class="ds">kallaga zarar −45%</div><div class="pr">${helOwn ? 'Sizda bor' : '$' + HELMET_PRICE}</div></div>`,
+    `<div class="item${armOwn && ARMOR_PRICE > 0 ? ' own' : ''}${!armOwn && me.money < ARMOR_PRICE ? ' no' : ''}" data-k="armor"><div class="ic">🦺</div><div class="nm">Zirh</div><div class="ds">zararning yarmini yutadi</div><div class="pr">${ARMOR_PRICE > 0 ? (armOwn ? 'To\'liq' : '$' + ARMOR_PRICE) : 'BEPUL'}</div></div>`,
+    `<div class="item${helOwn && HELMET_PRICE > 0 ? ' own' : ''}${!helOwn && me.money < HELMET_PRICE ? ' no' : ''}" data-k="helmet"><div class="ic">⛑</div><div class="nm">Dubulg'a</div><div class="ds">kallaga zarar −45%</div><div class="pr">${HELMET_PRICE > 0 ? (helOwn ? 'Sizda bor' : '$' + HELMET_PRICE) : 'BEPUL'}</div></div>`,
   ];
   box.innerHTML = `<div class="shophead"><h2>🛒 Do'kon</h2><div id="shopmoney">$${me.money}</div><button class="ghost" id="shopclose">✕ ${isTouch ? '' : '(B)'}</button></div>
     <div class="shopgrid">${items(w)}${items(g)}${items(eq)}</div>`;
@@ -693,7 +693,7 @@ function renderGrens() {
   if (!me.shopOpen) return;
   GRENADES.forEach((g, i) => {
     const d = document.createElement('div'); d.className = 'chip' + (i === me.selG ? ' act' : '') + (me.gren[i] <= 0 ? ' zero' : ''); d.dataset.g = i;
-    d.innerHTML = `${['💣', '☁️', '✨'][i]}<span>${me.gren[i]}</span>`;
+    d.innerHTML = `${['💣', '☁️', '✨'][i]}<span>${me.gren[i] >= GREN_MAX ? '∞' : me.gren[i]}</span>`;
     d.addEventListener('click', () => { me.selG = i; renderGrens(); });
     box.appendChild(d);
   });
@@ -758,16 +758,36 @@ function updateHud(t, dt) {
   if (settings.stats && t - (lastHud.st || 0) > 500) { $('stats').textContent = `${S.fps} FPS · ${S.ping} ms`; lastHud.st = t; }
   updateRevenge();
   if (settings.radar && t - (lastHud.rd || 0) > 60) { drawRadar(t); lastHud.rd = t; }
+  if (t - (lastHud.ah || 0) > 150) { lastHud.ah = t; updateAnimalHint(); }
 }
 const _v3 = new THREE.Vector3();
 function updateRevenge() {
   const el = $('rvmark');
   const o = S.nemesis >= 0 && me.alive ? others.get(S.nemesis) : null;
   if (!o || !o.alive || roundPhase !== 'play') { el.classList.add('hide'); return; }
-  _v3.set(o.model.root.position.x, o.model.root.position.y + (o.cr ? 1.7 : 2.25), o.model.root.position.z).project(camera);
+  _v3.set(o.model.root.position.x, o.model.root.position.y + (o.cr ? 1.7 : 2.25) * PS, o.model.root.position.z).project(camera);
   if (_v3.z > 1 || Math.abs(_v3.x) > 1 || Math.abs(_v3.y) > 1) { el.classList.add('hide'); return; }
   el.classList.remove('hide');
   el.style.left = ((_v3.x * 0.5 + 0.5) * window.innerWidth) + 'px'; el.style.top = ((-_v3.y * 0.5 + 0.5) * window.innerHeight) + 'px';
+}
+// Eng yaqin tirik hayvonga yo'nalish va masofa (hayvonni topish oson bo'lsin)
+function updateAnimalHint() {
+  const el = $('ahint');
+  let best = null, bd = Infinity;
+  if (me.alive && (S.phase === 'play' || S.phase === 'shop')) {
+    for (const a of animals.values()) {
+      if (!a.alive) continue;
+      const d = Math.hypot(a.model.position.x - me.x, a.model.position.z - me.z);
+      if (d < bd) { bd = d; best = a; }
+    }
+  }
+  if (!best) { el.classList.add('hide'); return; }
+  el.classList.remove('hide');
+  $('ahico').textContent = best.type === 0 ? '🐂' : '🐖';
+  $('ahtx').textContent = Math.round(bd) + ' m';
+  const dx = best.model.position.x - me.x, dz = best.model.position.z - me.z;
+  const f = dx * -Math.sin(me.yaw) + dz * -Math.cos(me.yaw), r = dx * Math.cos(me.yaw) + dz * -Math.sin(me.yaw);
+  $('aharr').style.transform = `rotate(${Math.atan2(r, f) - Math.PI / 2}rad)`;   // ➤ o'ng tomonga qaraydi; oldinda = tepaga
 }
 function drawRadar(t) {
   const cv = $('radar'); if (cv.style.display === 'none') return;
@@ -794,12 +814,17 @@ function drawRadar(t) {
     if (nem) { g.strokeStyle = '#ff5a4a'; g.lineWidth = 3; g.stroke(); }
   }
   g.globalAlpha = 1;
+  // hayvonlar: butun xaritada ko'rinadi (buqa: jigarrang uchburchak, cho'chqa: pushti doira)
   for (const a of animals.values()) {
-    if (!a.alive || a.type !== 0) continue;
-    if (Math.hypot(a.model.position.x - me.x, a.model.position.z - me.z) > 26) continue;
+    if (!a.alive) continue;
     const [x, y] = rel(a.model.position.x, a.model.position.z);
-    g.fillStyle = '#8d5a3a'; g.strokeStyle = '#f0c27a'; g.lineWidth = 2;
-    g.beginPath(); g.moveTo(x, y - 7); g.lineTo(x + 6, y + 5); g.lineTo(x - 6, y + 5); g.closePath(); g.fill(); g.stroke();
+    g.lineWidth = 2;
+    if (a.type === 0) {
+      g.fillStyle = '#b3541e'; g.strokeStyle = '#ffd89a';
+      g.beginPath(); g.moveTo(x, y - 9); g.lineTo(x + 8, y + 6); g.lineTo(x - 8, y + 6); g.closePath(); g.fill(); g.stroke();
+    } else {
+      g.fillStyle = '#ff8fb1'; g.strokeStyle = '#fff'; g.beginPath(); g.arc(x, y, 6, 0, 6.3); g.fill(); g.stroke();
+    }
   }
   g.fillStyle = '#fff'; g.beginPath(); g.moveTo(c, c - 9); g.lineTo(c + 6, c + 6); g.lineTo(c, c + 3); g.lineTo(c - 6, c + 6); g.closePath(); g.fill();
 }
@@ -961,7 +986,8 @@ function throwGrenade() {
     me.selG = i;
   }
   const i = me.selG;
-  me.gren[i]--; renderGrens(); vm.thr = 1;
+  if (me.gren[i] < GREN_MAX) me.gren[i]--;   // cheksiz granata kamaymaydi
+  renderGrens(); vm.thr = 1;
   send({ t: 'g', i, yaw: +me.yaw.toFixed(4), pitch: +me.pitch.toFixed(4) });
   A.sThrow();
 }
@@ -998,8 +1024,8 @@ function aimAssist(dt) {
     if (fx.smokeAt(cx, cy, cz)) return;
     bd = err; best = { yawT, pitchT, tag };
   };
-  for (const o of others.values()) if (o.alive) test(o.model.root.position.x, o.model.root.position.y + (o.cr ? 0.85 : 1.3), o.model.root.position.z);
-  for (const a of animals.values()) if (a.alive) test(a.model.position.x, a.type === 0 ? 1.0 : 0.5, a.model.position.z);
+  for (const o of others.values()) if (o.alive) test(o.model.root.position.x, o.model.root.position.y + (o.cr ? 0.85 : 1.3) * PS, o.model.root.position.z);
+  for (const a of animals.values()) if (a.alive) test(a.model.position.x, (a.type === 0 ? 1.0 : 0.5) * AS, a.model.position.z);
   if (!best) return;
   me.assisting = true;
   const k = Math.min(1, dt * (me.ads ? 7 : 4.5));

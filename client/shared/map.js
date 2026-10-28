@@ -154,11 +154,11 @@ function buildHovli() {
 function buildMaydon() {
   ARENA.x = 36.4; ARENA.z = 30.4;
   perimeter(36.4, 30.4);
-  // markazda "pinwheel": 4 ta past devor (1.3 m: tik turganda ko'rinasiz, o'tirsangiz yashirinasiz)
-  mk(BOXES, -6.5, 0, -1.5, -1.5, 1.3, -1.0, 'lowwall');
-  mk(BOXES, 1.0, 0, -6.5, 1.5, 1.3, -1.5, 'lowwall');
-  mk(BOXES, 1.5, 0, 1.0, 6.5, 1.3, 1.5, 'lowwall');
-  mk(BOXES, -1.5, 0, 1.5, -1.0, 1.3, 6.5, 'lowwall');
+  // markazda "pinwheel": 4 ta past devor (1.5 m: tik turganda ko'rinasiz, o'tirsangiz yashirinasiz)
+  mk(BOXES, -6.5, 0, -1.5, -1.5, 1.5, -1.0, 'lowwall');
+  mk(BOXES, 1.0, 0, -6.5, 1.5, 1.5, -1.5, 'lowwall');
+  mk(BOXES, 1.5, 0, 1.0, 6.5, 1.5, 1.5, 'lowwall');
+  mk(BOXES, -1.5, 0, 1.5, -1.0, 1.5, 6.5, 'lowwall');
   // katta yashiklar (1.8 m)
   const cr = [[-14, -9], [14, 9], [-14, 9], [14, -9], [0, -17], [0, 17], [-18, -19], [18, 19], [-9, 14], [9, -14], [-27, 4], [27, -4]];
   for (const [cx, cz] of cr) { CRATES.push([cx, cz]); mk(BOXES, cx - 0.9, 0, cz - 0.9, cx + 0.9, 1.8, cz + 0.9, 'crate'); }

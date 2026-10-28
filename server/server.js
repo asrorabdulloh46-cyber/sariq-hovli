@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { WebSocketServer } from 'ws';
 import {
   NAMES, WEAPONS, GRENADES, GREN_MAX, FRAG_RADIUS, FRAG_DMG, FLASH_RADIUS, SMOKE_SEC,
-  R, H, EYE, HC, EYE_C, MAX_HP, RESPAWN_MS, SPAWN_INV_MS, ROUND_SEC, END_SEC, KILL_LIMIT, HEAD_MULT,
+  R, H, EYE, HC, PS, EYE_C, MAX_HP, RESPAWN_MS, SPAWN_INV_MS, ROUND_SEC, END_SEC, KILL_LIMIT, HEAD_MULT,
   PICKUP_HEAL, PICKUP_RESPAWN_MS, START_MONEY, KILL_MONEY, HEAD_BONUS, REVENGE_BONUS, MONEY_CAP,
   ARMOR_PRICE, HELMET_PRICE, WIN_BONUS, ARMOR_ABSORB, HELMET_HEAD, MODES, ANIMALS, W_SNIPER, W_PISTOL, W_RIFLE,
 } from '../client/shared/consts.js';
@@ -15,6 +15,7 @@ import {
 } from '../client/shared/map.js';
 import { stepGrenade } from '../client/shared/physics.js';
 import { animals, resetAnimals, stepAnimals, damageAnimal, animalBox } from './animals.js';
+import { createPoyga } from './poyga.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_DIR = path.join(__dirname, '..', 'client');
@@ -33,7 +34,8 @@ const MIME = {
 const httpServer = http.createServer((req, res) => {
   let url = decodeURIComponent((req.url || '/').split('?')[0]);
   if (url === '/healthz') { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end('ok'); }
-  if (url === '/') url = '/index.html';
+  if (url === '/poyga') { res.writeHead(301, { Location: '/poyga/' }); return res.end(); }
+  if (url.endsWith('/')) url += 'index.html';
   const file = path.normalize(path.join(CLIENT_DIR, url));
   if (!file.startsWith(CLIENT_DIR)) { res.writeHead(403); return res.end('forbidden'); }
   fs.readFile(file, (err, data) => {
@@ -139,7 +141,7 @@ function fullAmmo() { return WEAPONS.map((w) => w.mag); }
 
 function resetLoadout(p) {
   p.own = startOwn(); p.w = startWeapon(); p.ammo = fullAmmo();
-  p.armor = 0; p.helmet = 0; p.gren = [0, 0, 0]; p.reloadEnd = 0; p.nextFire = 0;
+  p.armor = 0; p.helmet = 0; p.gren = shopOpen() ? [GREN_MAX, GREN_MAX, GREN_MAX] : [0, 0, 0]; p.reloadEnd = 0; p.nextFire = 0;
 }
 function sendSt(p) { send(p, { t: 'st', money: p.money, armor: Math.round(p.armor), helmet: p.helmet, gren: p.gren, own: p.own.map((v) => (v ? 1 : 0)), shop: shopOpen() ? 1 : 0 }); }
 function sendAmmo(p) { send(p, { t: 'a', w: p.w, a: p.ammo, r: p.reloadEnd > now() ? 1 : 0, own: p.own.map((v) => (v ? 1 : 0)) }); }
@@ -278,8 +280,8 @@ function handleShoot(p, msg) {
     for (const v of players) {
       if (!v || v.id === p.id || !v.alive) continue;
       const vp = posAt(v, t - rewind);
-      const vh = vp.cr ? HC : H;
-      const bt = rayBox(ox, oy, oz, dx, dy, dz, { minx: vp.x - 0.34, miny: vp.y, minz: vp.z - 0.34, maxx: vp.x + 0.34, maxy: vp.y + vh, maxz: vp.z + 0.34 });
+      const vh = (vp.cr ? HC : H) * PS, hr = 0.34 * PS;   // model kattaroq: zarba qutisi ham kattaroq
+      const bt = rayBox(ox, oy, oz, dx, dy, dz, { minx: vp.x - hr, miny: vp.y, minz: vp.z - hr, maxx: vp.x + hr, maxy: vp.y + vh, maxz: vp.z + hr });
       consider(bt, 1, { v, vy: vp.y, vh });
     }
     for (const a of animals) {
@@ -322,7 +324,7 @@ function throwGrenade(p, msg) {
   if (!p.alive || phase !== 'play' || i < 0 || i >= GRENADES.length || p.gren[i] <= 0) return;
   if (t < (p.nextGren || 0)) return;
   p.nextGren = t + 700;
-  p.gren[i]--;
+  if (p.gren[i] < GREN_MAX) p.gren[i]--;   // 99 = cheksiz
   p.invUntil = Math.min(p.invUntil, t);
   const eye = p.cr ? EYE_C : EYE;
   const yaw = isNum(msg.yaw) ? msg.yaw : p.yaw;
@@ -389,23 +391,22 @@ function buy(p, msg) {
   const tell = (m) => send(p, { t: 'msg', m });
   if (k === 'w') {
     const i = msg.i | 0, wd = WEAPONS[i];
-    if (!wd || wd.price <= 0) return;
-    if (p.own[i]) return tell(wd.name + ' allaqachon bor');
+    if (!wd) return;
     if (p.money < wd.price) return tell('Pul yetmaydi');
     p.money -= wd.price; p.own[i] = true; p.ammo[i] = wd.mag; p.w = i; p.reloadEnd = 0; p.nextFire = now() + 300;
-    tell(wd.name + ' sotib olindi'); sendAmmo(p);
+    tell(wd.name + (wd.price > 0 ? ' sotib olindi' : ': o\'qlar to\'ldirildi')); sendAmmo(p);
   } else if (k === 'g') {
     const i = msg.i | 0, g = GRENADES[i];
     if (!g) return;
-    if (p.gren[i] >= GREN_MAX) return tell(g.name + ': ko\'proq ko\'tara olmaysiz');
+    if (p.gren[i] >= GREN_MAX) return tell(g.name + ': cheksiz');
     if (p.money < g.price) return tell('Pul yetmaydi');
-    p.money -= g.price; p.gren[i]++; tell(g.name + ' sotib olindi');
+    p.money -= g.price; p.gren[i] = g.price > 0 ? p.gren[i] + 1 : GREN_MAX; tell(g.name + (g.price > 0 ? ' sotib olindi' : ': cheksiz'));
   } else if (k === 'armor') {
-    if (p.armor >= 100) return tell('Zirh to\'liq');
+    if (p.armor >= 100 && ARMOR_PRICE > 0) return tell('Zirh to\'liq');
     if (p.money < ARMOR_PRICE) return tell('Pul yetmaydi');
     p.money -= ARMOR_PRICE; p.armor = 100; tell('Zirh sotib olindi');
   } else if (k === 'helmet') {
-    if (p.helmet) return tell('Dubulg\'a bor');
+    if (p.helmet && HELMET_PRICE > 0) return tell('Dubulg\'a bor');
     if (p.money < HELMET_PRICE) return tell('Pul yetmaydi');
     p.money -= HELMET_PRICE; p.helmet = 1; tell('Dubulg\'a sotib olindi');
   } else return;
@@ -482,7 +483,7 @@ function onMessage(ws, raw) {
       if (ws.player && ws.player.id !== id) { players[ws.player.id] = null; }
       const np = { id, ws, name: NAMES[id], x: 0, y: 0, z: 0, yaw: 0, pitch: 0, hp: MAX_HP, alive: true, w: 1,
         ammo: fullAmmo(), own: startOwn(), reloadEnd: 0, nextFire: 0, invUntil: 0, respawnAt: 0, rs: 0,
-        lastSeen: now(), hist: [], rtt: 0, cr: 0, money: START_MONEY, armor: 0, helmet: 0, gren: [0, 0, 0],
+        lastSeen: now(), hist: [], rtt: 0, cr: 0, money: START_MONEY, armor: 0, helmet: 0, gren: shopOpen() ? [GREN_MAX, GREN_MAX, GREN_MAX] : [0, 0, 0],
         streak: 0, nemesis: -1, vh: 0, vv: 0, lastIn: 0 };
       ws.player = np; players[id] = np;
       respawn(np, true);
@@ -596,7 +597,14 @@ function lobbyMsg() {
     map: MAP.id, want: wantMap, mode, wmode: wantMode, tot,
   };
 }
-const wss = new WebSocketServer({ server: httpServer, path: '/ws', maxPayload: 4096 });
+const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
+const poyga = createPoyga();   // "Poyga" o'yini: /ws2
+httpServer.on('upgrade', (req, socket, head) => {
+  const p = (req.url || '').split('?')[0];
+  if (p === '/ws') wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+  else if (p === '/ws2') poyga.handleUpgrade(req, socket, head);
+  else socket.destroy();
+});
 wss.on('connection', (ws) => {
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });

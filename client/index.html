@@ -61,6 +61,8 @@
   #hpfill.low { background:linear-gradient(90deg,#c62828,#ef5350); }
   #arbar { height:6px; margin-top:3px; background:rgba(0,0,0,.5); border-radius:4px; overflow:hidden; border:1px solid rgba(255,255,255,.2); }
   #arfill { height:100%; width:0; background:linear-gradient(90deg,#42a5f5,#90caf9); transition:width .15s; }
+  #ahint { position:absolute; top:calc(116px + var(--safe-t)); left:calc(10px + var(--safe-l)); font-size:12px; font-weight:800; color:#fff; background:rgba(0,0,0,.4); border-radius:10px; padding:3px 8px; display:flex; gap:6px; align-items:center; pointer-events:none; white-space:nowrap; }
+  #ahint .arr { display:inline-block; font-size:16px; color:#ffd166; transition:transform .15s; }
   #moneyrow { margin-top:3px; font-size:14px; font-weight:800; color:#9be564; display:flex; justify-content:space-between; }
   #moneyrow span:last-child { color:#8ec9ff; font-size:12px; }
   #ammo { text-align:right; min-width:80px; }
@@ -173,7 +175,7 @@
     .big { padding:10px 34px; font-size:18px; margin-top:2px; } .row { margin:4px 0; } .help { margin-top:4px; font-size:11px; }
     #status { margin:2px 0; min-height:16px; } #menu { align-items:flex-start; }
     .menubtns { margin-top:4px; } .ghost { padding:7px 12px; margin:2px; } .opt { padding:6px; } .opt .pv { height:28px; }
-    #radar { width:72px; height:72px; } #feed { top:calc(100px + var(--safe-t)); }
+    #radar { width:72px; height:72px; } #ahint { top:calc(100px + var(--safe-t)); } #feed { top:calc(100px + var(--safe-t)); }
   }
   kbd { background:#3a2c17; border:1px solid #6a5026; border-radius:4px; padding:0 5px; font-size:11px; color:#fff; }
 </style>
@@ -189,6 +191,7 @@
   <div id="hitm"></div>
   <div id="stats"></div>
   <canvas id="radar" width="176" height="176"></canvas>
+  <div id="ahint" class="hide"><span id="ahico">🐂</span><span id="ahtx"></span><span class="arr" id="aharr">➤</span></div>
   <div id="feed"></div>
   <div id="topc"><div id="timer">5:00</div><div id="goal"></div></div>
   <div id="score"></div>
