@@ -630,3 +630,8 @@ setInterval(() => {
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`Sariq Hovli serveri ishga tushdi: http://localhost:${PORT}`);
 });
+
+
+// Render bepul tarifida uxlab qolmaslik uchun: har 10 daqiqada o'ziga so'rov yuboradi
+const SELF_URL = process.env.RENDER_EXTERNAL_URL || '';
+if (SELF_URL) setInterval(() => { fetch(SELF_URL + '/healthz').catch(() => {}); }, 10 * 60 * 1000);
