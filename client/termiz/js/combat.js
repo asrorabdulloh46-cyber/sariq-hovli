@@ -111,7 +111,7 @@ export class BulletManager {
   }
 
   // ox, oy, oz — total nuqta; dirX, dirZ — yo'nalish
-  fire(ox, oy, oz, dirX, dirZ, dmg, range, spread = 0) {
+  fire(ox, oy, oz, dirX, dirZ, dmg, range, spread = 0, dirY = 0) {
     const len = Math.hypot(dirX, dirZ) || 1;
     const nx = dirX / len, nz = dirZ / len;
 
@@ -125,13 +125,14 @@ export class BulletManager {
     // Yo'nalish rotatsiyasi
     const angle = Math.atan2(nx + sx, nz + sz);
     mesh.rotation.y = angle;
+    mesh.rotation.x = -Math.asin(Math.max(-1, Math.min(1, dirY)));
     this.scene.add(mesh);
 
     this.bullets.push({
       mesh,
       x: ox, y: oy, z: oz,
       vx: (nx + sx) * 90,
-      vy: -0.5,
+      vy: dirY * 90 + (Math.random() - 0.5) * spread * 90,
       vz: (nz + sz) * 90,
       dmg, life: range / 90,
       startX: ox, startZ: oz,
@@ -166,17 +167,18 @@ export class BulletManager {
     }
   }
 
-  update(dt) {
+  update(dt, world) {
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
+      const px = b.x, pz = b.z;
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       b.z += b.vz * dt;
-      b.vy -= 9.8 * dt; // tortishish kuchi
+      b.vy -= 2.0 * dt; // yengil tushish
       b.life -= dt;
       b.mesh.position.set(b.x, b.y, b.z);
-
-      if (b.life <= 0 || b.y < -5) {
+      const blocked = world && b.y < 14 && world.rayBlocked(px, pz, b.x, b.z);
+      if (b.life <= 0 || b.y < 0 || blocked) {
         this.scene.remove(b.mesh);
         this.bullets.splice(i, 1);
       }
@@ -190,6 +192,7 @@ export class BulletManager {
     const hits = [];
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
+      if (b.y > 2.2 || b.y < 0.05) continue;
       for (const t of targets) {
         const tx = typeof t.x === 'number' ? t.x : (t.position?.x ?? 0);
         const tz = typeof t.z === 'number' ? t.z : (t.position?.z ?? 0);
@@ -219,7 +222,7 @@ export class BulletManager {
 }
 
 // ── Politsiya mashinasi ───────────────────────────────────────────────────────
-import { newCar, stepCar, createCar } from './cars.js';
+import { newCar, stepCar, createCar, animateCar } from './cars.js';
 
 export class PoliceCar {
   constructor(scene, x, z, h = 0) {
@@ -234,7 +237,7 @@ export class PoliceCar {
     this._chaseMode = 'approach'; // approach | ram | circle
   }
 
-  update(dt, targetX, targetZ) {
+  update(dt, targetX, targetZ, world) {
     const c = this.car;
     this._lightT += dt;
 
@@ -258,22 +261,13 @@ export class PoliceCar {
     };
     stepCar(c, inp, dt);
 
-    this.mesh.position.set(c.x, 0, c.z);
-    this.mesh.rotation.y = c.h;
-
-    // Siren chiroqlari
-    this._animateSiren();
-  }
-
-  _animateSiren() {
-    const lights = this.mesh.children.filter(ch =>
-      ch.isMesh && ch.geometry.type === 'SphereGeometry'
-    );
-    if (lights.length >= 2) {
-      const on = Math.sin(this._lightT * 12) > 0;
-      lights[0].material.color.setHex(on ? 0xff2200 : 0x330000);
-      lights[1].material.color.setHex(on ? 0x0033ff : 0x000033);
+    if (world) {
+      const p = world.pushOut(c.x, c.z, 1.6);
+      if (p.hit) { c.x = p.x; c.z = p.z; c.vx *= 0.3; c.vz *= 0.3; }
     }
+    this.mesh.position.set(c.x, 0.03, c.z);
+    this.mesh.rotation.y = c.h;
+    animateCar(this.mesh, dt, c.vx * Math.sin(c.h) + c.vz * Math.cos(c.h), 0, this._lightT);
   }
 
   dispose() {

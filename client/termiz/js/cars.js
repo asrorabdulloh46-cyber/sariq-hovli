@@ -1,178 +1,272 @@
-// Termiz — Mashinalar (Poyga/cars.js dan moslashtirilgan)
+// Termiz — Mashinalar: fizika + sifatli past-poligonli modellar (profil ekstruziyasi, g'ildirak, chiroq, davlat raqami)
 import * as THREE from '../../vendor/three.module.min.js';
 
-// ── Fizika konstantalari ─────────────────────────────────────────────────────
+// ── Fizika ───────────────────────────────────────────────────────────────────
 export const PHYS = {
-  VMAX: 55,      // m/s (~200 km/h)
-  ACC: 18,
-  BRAKE: 35,
-  YAW: 1.4,
-  DRAG: 0.9,
-  SLIP: 0.012,
-  HANDBRAKE_DRAG: 4,
+  VMAX: 50, ACC: 17, BRAKE: 34, YAW: 1.55, DRAG: 0.9, SLIP: 0.012, HANDBRAKE_DRAG: 4,
 };
 
-// ── Mashina holati (server bilan mos) ────────────────────────────────────────
-export function newCar(x, z, h = 0, modelId = 0) {
-  return {
-    x, z, h,            // pozitsiya, burchak
-    vx: 0, vz: 0,       // tezlik
-    yawRate: 0,
-    onGround: true,
-    modelId,
-    color: 0xffffff,
-    gear: 0,            // 0=park, 1=forward, -1=reverse
-  };
+export function newCar(x, z, h = 0, modelId = 'sedan') {
+  return { x, z, h, vx: 0, vz: 0, yawRate: 0, onGround: true, modelId, color: 0xffffff, gear: 0 };
 }
 
+// h — burilish: oldinga (sin h, cos h). h ortsa — chapga buriladi, shuning uchun o'ngga rul (steer>0) h ni kamaytiradi.
 export function stepCar(c, inp, dt) {
   const { VMAX, ACC, BRAKE, YAW, DRAG, SLIP, HANDBRAKE_DRAG } = PHYS;
-  const fwd = { x: Math.sin(c.h), z: Math.cos(c.h) };
-  const speed = c.vx * fwd.x + c.vz * fwd.z;
-  const signS = speed >= 0 ? 1 : -1;
-
-  // Gas/brake
+  const fx = Math.sin(c.h), fz = Math.cos(c.h);
+  const speed = c.vx * fx + c.vz * fz;
+  const signS = speed >= -0.3 ? 1 : -1;
   let accel = 0;
-  if (inp.gas   > 0) accel =  ACC * inp.gas;
+  if (inp.gas > 0) accel = ACC * inp.gas * (1 - Math.max(0, speed) / (VMAX * 1.05));
   if (inp.brake > 0) {
-    if (signS > 0 || speed < 0.5) accel = -BRAKE * inp.brake;
-    else accel = -ACC * 0.6; // reverse
+    if (speed > 0.8) accel = -BRAKE * inp.brake;
+    else accel = -ACC * 0.55 * inp.brake;          // orqaga yurish
   }
-  if (!inp.gas && !inp.brake) {
-    accel = -DRAG * speed; // engine braking
-  }
+  if (!inp.gas && !inp.brake) accel = -DRAG * speed - Math.sign(speed) * 0.6;
+  let ns = speed + accel * dt;
+  if (!inp.gas && !inp.brake && Math.abs(ns) < 0.25) ns = 0;
+  const newSpeed = Math.min(VMAX, Math.max(-VMAX * 0.3, ns));
 
-  const newSpeed = Math.min(VMAX, Math.max(-VMAX * 0.5, speed + accel * dt));
-
-  // Rul
-  const grip = Math.min(1, Math.abs(speed) / 4);
-  const targetYaw = inp.steer * YAW * grip * signS;
+  const grip = Math.min(1, Math.abs(speed) / 3.5);
+  const hi = 1 / (1 + Math.abs(speed) / 22);                 // tez yurganda rul sezgirligi kamayadi
+  const targetYaw = -inp.steer * YAW * grip * signS * (0.55 + 0.45 * hi);
   c.yawRate += (targetYaw - c.yawRate) * Math.min(1, dt * 8);
-  if (inp.handbrake) {
-    c.yawRate *= 1 + HANDBRAKE_DRAG * dt;
-  }
+  if (inp.handbrake) c.yawRate *= 1 + HANDBRAKE_DRAG * dt;
   c.h += c.yawRate * dt;
 
-  // Lateral slip
-  const right = { x: Math.cos(c.h), z: -Math.sin(c.h) };
-  const latSpeed = c.vx * right.x + c.vz * right.z;
-  const slipFact = inp.handbrake ? 0.3 : (1 - SLIP * Math.abs(latSpeed) * dt);
-
-  c.vx = fwd.x * newSpeed + right.x * latSpeed * slipFact;
-  c.vz = fwd.z * newSpeed + right.z * latSpeed * slipFact;
-
-  c.x += c.vx * dt;
-  c.z += c.vz * dt;
+  // yon tomonga sirpanish (yangi yo'nalishga nisbatan)
+  const nfx = Math.sin(c.h), nfz = Math.cos(c.h);
+  const rx = -nfz, rz = nfx;                                  // o'ng vektor (ekranda)
+  const lat = c.vx * rx + c.vz * rz;
+  const keep = inp.handbrake ? 0.55 : Math.max(0, 1 - 7 * dt);
+  c.vx = nfx * newSpeed + rx * lat * keep;
+  c.vz = nfz * newSpeed + rz * lat * keep;
+  c.x += c.vx * dt; c.z += c.vz * dt;
 }
 
-// ── Mashina mesh'lari ─────────────────────────────────────────────────────────
-const CAR_CACHE = {};
-
+// ── Modellar ─────────────────────────────────────────────────────────────────
+// l — uzunlik, w — eni, h — balandligi; prof — kuzov shakli
 const CAR_SPECS = {
-  // Chevrolet
-  nexia:    { l: 4.4, w: 1.7, h: 1.45, name: "Nexia",    hue: 0 },
-  cobalt:   { l: 4.6, w: 1.75, h: 1.5, name: "Cobalt",   hue: 20 },
-  lacetti:  { l: 4.5, w: 1.72, h: 1.47, name: "Lacetti",  hue: 180 },
-  malibu:   { l: 4.85, w: 1.85, h: 1.45, name: "Malibu",  hue: 220 },
-  damas:    { l: 3.1, w: 1.4,  h: 1.75, name: "Damas",    hue: 60 },
-  matiz:    { l: 3.5, w: 1.5,  h: 1.5,  name: "Matiz",    hue: 300 },
-  // Global
-  sedan:    { l: 4.6, w: 1.8,  h: 1.45, name: "Sedan",    hue: 0 },
-  suv:      { l: 4.9, w: 1.95, h: 1.75, name: "SUV",      hue: 30 },
-  truck:    { l: 5.5, w: 2.0,  h: 1.9,  name: "Truck",    hue: 200 },
-  van:      { l: 4.8, w: 1.9,  h: 1.85, name: "Van",      hue: 120 },
-  police:   { l: 4.6, w: 1.8,  h: 1.5,  name: "Politsiya",hue: 220 },
+  nexia:   { l: 4.35, w: 1.68, h: 1.42, name: 'Nexia',    prof: 'sedan', wr: 0.30 },
+  cobalt:  { l: 4.50, w: 1.72, h: 1.48, name: 'Cobalt',   prof: 'sedan', wr: 0.31 },
+  lacetti: { l: 4.50, w: 1.72, h: 1.46, name: 'Lacetti',  prof: 'sedan', wr: 0.31 },
+  malibu:  { l: 4.85, w: 1.86, h: 1.46, name: 'Malibu',   prof: 'sedan', wr: 0.33 },
+  damas:   { l: 3.25, w: 1.42, h: 1.80, name: 'Damas',    prof: 'van',   wr: 0.26 },
+  matiz:   { l: 3.50, w: 1.50, h: 1.50, name: 'Matiz',    prof: 'hatch', wr: 0.26 },
+  sedan:   { l: 4.60, w: 1.80, h: 1.45, name: 'Sedan',    prof: 'sedan', wr: 0.32 },
+  suv:     { l: 4.90, w: 1.95, h: 1.75, name: 'SUV',      prof: 'suv',   wr: 0.38 },
+  truck:   { l: 5.50, w: 2.00, h: 1.95, name: 'Yuk mashina', prof: 'van', wr: 0.38 },
+  van:     { l: 4.80, w: 1.90, h: 1.88, name: 'Mikroavtobus', prof: 'van', wr: 0.34 },
+  police:  { l: 4.60, w: 1.80, h: 1.48, name: 'Politsiya', prof: 'sedan', wr: 0.32 },
+};
+export const CAR_IDS = Object.keys(CAR_SPECS);
+export const CHEVROLET_IDS = ['nexia', 'cobalt', 'lacetti', 'malibu', 'damas', 'matiz'];
+
+// Normallashtirilgan profillar: kuzov (pastki qism) va kabina (to'rt burchak)
+// u: -0.5 (orqa) .. 0.5 (old), v: 0..1 (balandlik)
+const PROF = {
+  sedan: { low: [[-0.495, 0.17], [-0.5, 0.27], [-0.5, 0.52], [-0.45, 0.58], [-0.30, 0.60], [0.26, 0.61], [0.40, 0.57], [0.49, 0.47], [0.5, 0.32], [0.485, 0.17]], cab: [[-0.30, 0.58], [-0.185, 1.0], [0.07, 1.0], [0.27, 0.59]], wb: [0.30, 0.30] },
+  hatch: { low: [[-0.495, 0.17], [-0.5, 0.30], [-0.5, 0.62], [-0.46, 0.64], [0.28, 0.62], [0.41, 0.56], [0.49, 0.45], [0.5, 0.30], [0.485, 0.17]], cab: [[-0.45, 0.62], [-0.38, 1.0], [0.06, 1.0], [0.26, 0.62]], wb: [0.30, 0.30] },
+  suv:   { low: [[-0.495, 0.18], [-0.5, 0.30], [-0.5, 0.64], [-0.44, 0.67], [0.30, 0.66], [0.43, 0.62], [0.5, 0.50], [0.5, 0.32], [0.485, 0.18]], cab: [[-0.46, 0.65], [-0.43, 1.0], [0.12, 1.0], [0.30, 0.66]], wb: [0.32, 0.30] },
+  van:   { low: [[-0.495, 0.18], [-0.5, 0.30], [-0.5, 0.72], [0.28, 0.70], [0.40, 0.62], [0.5, 0.50], [0.5, 0.32], [0.485, 0.18]], cab: [[-0.5, 0.70], [-0.495, 1.0], [0.20, 1.0], [0.34, 0.68]], wb: [0.31, 0.29] },
 };
 
-export const CAR_IDS = Object.keys(CAR_SPECS);
-export const CHEVROLET_IDS = ['nexia','cobalt','lacetti','malibu','damas','matiz'];
+// ── Umumiy materiallar ───────────────────────────────────────────────────────
+const MAT = {
+  glass: new THREE.MeshStandardMaterial({ color: 0x0c141c, roughness: 0.06, metalness: 0.85 }),
+  tire: new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.95 }),
+  rim: new THREE.MeshStandardMaterial({ color: 0xbfc3c8, roughness: 0.28, metalness: 0.9 }),
+  trim: new THREE.MeshStandardMaterial({ color: 0x1b1d20, roughness: 0.7 }),
+  chrome: new THREE.MeshStandardMaterial({ color: 0xd0d4d8, roughness: 0.2, metalness: 1 }),
+  head: new THREE.MeshStandardMaterial({ color: 0xf6f2e0, emissive: 0xfff2c0, emissiveIntensity: 0.15, roughness: 0.2 }),
+  tail: new THREE.MeshStandardMaterial({ color: 0x8a0f0f, emissive: 0xff1a10, emissiveIntensity: 0.25, roughness: 0.3 }),
+  white: new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.45, metalness: 0.2 }),
+  beam: null,
+};
+const PAINT = new Map();
+function paint(color) {
+  let m = PAINT.get(color);
+  if (!m) { m = new THREE.MeshStandardMaterial({ color, roughness: 0.34, metalness: 0.55, envMapIntensity: 1.1 }); PAINT.set(color, m); }
+  return m;
+}
+function glowTex() {
+  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 128;
+  const c = cv.getContext('2d'); const g = c.createLinearGradient(0, 0, 0, 128);
+  g.addColorStop(0, 'rgba(255,240,200,0.9)'); g.addColorStop(1, 'rgba(255,240,200,0)');
+  c.fillStyle = g; c.fillRect(0, 0, 64, 128);
+  const gx = c.createLinearGradient(0, 0, 64, 0); gx.addColorStop(0, 'rgba(0,0,0,1)'); gx.addColorStop(0.5, 'rgba(0,0,0,0)'); gx.addColorStop(1, 'rgba(0,0,0,1)');
+  c.globalCompositeOperation = 'destination-out'; c.fillStyle = gx; c.fillRect(0, 0, 64, 128);
+  return new THREE.CanvasTexture(cv);
+}
+MAT.beam = new THREE.MeshBasicMaterial({ map: glowTex(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, side: THREE.DoubleSide });
+export function setCarNight(n) {
+  MAT.head.emissiveIntensity = 0.15 + n * 2.2;
+  MAT.tail.emissiveIntensity = 0.25 + n * 0.9;
+  MAT.beam.opacity = n * 0.55;
+}
 
-function makeCarBody(spec, color) {
-  const { l, w, h } = spec;
+// Davlat raqami (O'zbekiston): ko'k 'UZ' + "01 A 777 AA"
+const PLATES = [];
+function plate(i) {
+  if (PLATES[i]) return PLATES[i];
+  const letters = 'ABCDEKLMNPRSTXY';
+  const num = ['01', '10', '30', '40', '60', '70', '75', '80'][i % 8] + ' ' + letters[(i * 7) % letters.length] + ' ' + String(100 + (i * 137) % 900) + ' ' + letters[(i * 3) % letters.length] + letters[(i * 5 + 1) % letters.length];
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#f4f4f0'; c.fillRect(0, 0, 256, 64);
+  c.strokeStyle = '#111'; c.lineWidth = 4; c.strokeRect(2, 2, 252, 60);
+  c.fillStyle = '#1b4fa0'; c.fillRect(6, 6, 38, 52);
+  c.fillStyle = '#fff'; c.font = 'bold 18px sans-serif'; c.textAlign = 'center'; c.fillText('UZ', 25, 40);
+  c.fillStyle = '#111'; c.font = 'bold 34px monospace'; c.fillText(num, 150, 45);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  PLATES[i] = new THREE.MeshStandardMaterial({ map: t, roughness: 0.5 });
+  return PLATES[i];
+}
+
+// ── Geometriya kesh ─────────────────────────────────────────────────────────
+const GEO = {};
+const _M = new THREE.Matrix4();
+function toCar(geom, halfDepth) {   // shakl (x_s,y_s,z_s) → mashina (x=-z_s+d/2, y, z=x_s)
+  _M.set(0, 0, -1, halfDepth, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1);
+  geom.applyMatrix4(_M); geom.computeVertexNormals(); return geom;
+}
+function extrude(pts, width, bevel = 0.05) {
+  const sh = new THREE.Shape(pts.map(p => new THREE.Vector2(p[0], p[1])));
+  const d = Math.max(0.05, width - bevel * 2);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel * 0.9, bevelSegments: 2, curveSegments: 6 });
+  return toCar(g, d / 2);
+}
+function buildGeos(id) {
+  if (GEO[id]) return GEO[id];
+  const s = CAR_SPECS[id] || CAR_SPECS.sedan, P = PROF[s.prof];
+  const { l, w, h } = s;
+  const pt = ([u, v]) => [u * l, v * h];
+  // Kuzov: yuqori chiziq (orqa→old), pastki chiziq old→orqa (g'ildirak kamarlari bilan)
+  const top = P.low.slice(0, P.low.length - 1).map(pt);
+  const bottomFront = pt(P.low[P.low.length - 1]);
+  const zf = l * P.wb[0], zr = -l * P.wb[1], ra = s.wr + 0.09, gy = 0.17 * h;
+  const wheelArch = (zc) => { const a = []; for (let i = 0; i <= 10; i++) { const z = zc + ra - 2 * ra * i / 10; a.push([z, gy + Math.sqrt(Math.max(0, ra * ra - (z - zc) * (z - zc)))]); } return a; };
+  const poly = [...top, bottomFront, ...wheelArch(zf), ...wheelArch(zr)];
+  const body = extrude(poly, w * 0.93, 0.06);
+  const c = P.cab.map(pt);
+  const cabG = extrude(c, w * 0.86, 0.035);
+  const lerp2 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const reg = (s0, s1, t0, t1) => {
+    const Pt = (ss, tt) => lerp2(lerp2(c[0], c[3], ss), lerp2(c[1], c[2], ss), tt);
+    return [Pt(s0, t0), Pt(s1, t0), Pt(s1, t1), Pt(s0, t1)];
+  };
+  const pil = [];
+  pil.push(extrude(reg(0.0, 0.16, 0.0, 1.0), w * 0.9, 0.03));                  // C ustun
+  pil.push(extrude(reg(0.47, 0.53, 0.0, 1.0), w * 0.9, 0.03));                 // B ustun
+  pil.push(extrude(reg(0.93, 1.0, 0.0, 1.0), w * 0.9, 0.03));                  // A ustun
+  pil.push(extrude(reg(0.0, 1.0, 0.9, 1.0), w * 0.9, 0.04));                   // tom
+  GEO[id] = { body, cab: cabG, pil, s, zf, zr };
+  return GEO[id];
+}
+
+const wheelGeos = {};
+function wheelGeo(r, wd) {
+  const k = r.toFixed(2) + wd.toFixed(2);
+  if (wheelGeos[k]) return wheelGeos[k];
+  const tire = new THREE.CylinderGeometry(r, r, wd, 18).rotateZ(Math.PI / 2);
+  const rim = new THREE.CylinderGeometry(r * 0.64, r * 0.64, wd * 1.03, 12).rotateZ(Math.PI / 2);
+  // 5 ta spitsa (ko'rinish)
+  const hub = new THREE.CylinderGeometry(r * 0.2, r * 0.2, wd * 1.1, 8).rotateZ(Math.PI / 2);
+  return (wheelGeos[k] = { tire, rim, hub });
+}
+const boxG = new THREE.BoxGeometry(1, 1, 1);
+const planeG = new THREE.PlaneGeometry(1, 1);
+
+function makeCarBody(id, color) {
+  const G = buildGeos(id), s = G.s;
+  const { l, w, h } = s;
   const group = new THREE.Group();
+  const isPolice = id === 'police';
+  const pmat = paint(isPolice ? 0xf2f4f8 : color);
+  const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; group.add(m); return m; };
+  add(G.body, pmat, 0, 0, 0);
+  add(G.cab, MAT.glass, 0, 0, 0);
+  for (const p of G.pil) add(p, pmat, 0, 0, 0);
 
-  // Asosiy tana
-  const bodyMat = new THREE.MeshLambertMaterial({ color });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.6, l), bodyMat);
-  body.position.y = h * 0.35; group.add(body);
-
-  // Kabina
-  const cabMat = new THREE.MeshLambertMaterial({ color: 0x222233 });
-  const cab = new THREE.Mesh(new THREE.BoxGeometry(w * 0.9, h * 0.42, l * 0.55), bodyMat);
-  cab.position.set(0, h * 0.65 + h * 0.42 * 0.5, l * 0.02); group.add(cab);
-
-  // Oynalar
-  const glassMat = new THREE.MeshLambertMaterial({ color: 0x88bbdd, transparent: true, opacity: 0.5 });
-  const wind = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.82, h * 0.35), glassMat);
-  wind.position.set(0, h * 0.78, l * 0.55 * 0.49); wind.rotation.y = Math.PI; group.add(wind);
-  const rear = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.82, h * 0.3), glassMat);
-  rear.position.set(0, h * 0.78, -l * 0.55 * 0.49); group.add(rear);
+  const bx = (mat, sx, sy, sz, x, y, z) => { const m = new THREE.Mesh(boxG, mat); m.scale.set(sx, sy, sz); m.position.set(x, y, z); group.add(m); return m; };
+  const P = PROF[s.prof];
+  const frontZ = l / 2, rearZ = -l / 2;
+  // Bamperlar, panjara, faralar
+  bx(MAT.trim, w * 0.97, 0.16, 0.12, 0, 0.30, frontZ - 0.02);
+  bx(MAT.trim, w * 0.97, 0.16, 0.12, 0, 0.30, rearZ + 0.02);
+  bx(MAT.trim, w * 0.5, 0.12 * h, 0.05, 0, h * 0.44, frontZ + 0.01);            // panjara
+  for (const sx of [-1, 1]) {
+    bx(MAT.head, w * 0.2, 0.1, 0.06, sx * w * 0.36, h * 0.46, frontZ + 0.02);
+    bx(MAT.tail, w * 0.2, 0.1, 0.06, sx * w * 0.38, h * 0.50, rearZ - 0.02);
+    // ko'zgular
+    bx(pmat, 0.16, 0.1, 0.1, sx * (w * 0.5 + 0.04), h * 0.64, l * (P.cab[3][0] - 0.05));
+    // eshik tutqichlari
+    bx(MAT.chrome, 0.03, 0.03, 0.14, sx * (w * 0.49), h * 0.55, -l * 0.02);
+  }
+  // Davlat raqamlari
+  const pi = Math.abs(Math.floor(color * 7 + l * 31)) % 6;
+  const pf = new THREE.Mesh(planeG, plate(pi)); pf.scale.set(0.5, 0.125, 1); pf.position.set(0, 0.42, frontZ + 0.035); group.add(pf);
+  const pr = new THREE.Mesh(planeG, plate(pi + 3)); pr.scale.set(0.5, 0.125, 1); pr.rotation.y = Math.PI; pr.position.set(0, 0.46, rearZ - 0.035); group.add(pr);
 
   // G'ildiraklar
-  const wheelMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
-  const rimMat   = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
-  const wR = h * 0.18, wW = w * 0.1;
-  const positions = [
-    [w * 0.5, 0, l * 0.33], [-w * 0.5, 0, l * 0.33],
-    [w * 0.5, 0,-l * 0.33], [-w * 0.5, 0,-l * 0.33],
-  ];
-  for (const [wx, wy, wz] of positions) {
-    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(wR, wR, wW, 10), wheelMat);
-    wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(wx, wR, wz);
-    group.add(wheel);
-    const rim = new THREE.Mesh(new THREE.CylinderGeometry(wR * 0.6, wR * 0.6, wW * 1.05, 6), rimMat);
-    rim.rotation.z = Math.PI / 2;
-    rim.position.set(wx, wR, wz);
-    group.add(rim);
+  const wr = s.wr, wd = 0.22;
+  const wg = wheelGeo(wr, wd);
+  const wheels = [];
+  for (const [zc, front] of [[G.zf, true], [G.zr, false]]) for (const sx of [-1, 1]) {
+    const steer = new THREE.Group(); steer.position.set(sx * (w / 2 - wd * 0.42), wr, zc);
+    const spin = new THREE.Group(); steer.add(spin);
+    spin.add(new THREE.Mesh(wg.tire, MAT.tire), new THREE.Mesh(wg.rim, MAT.rim), new THREE.Mesh(wg.hub, MAT.chrome));
+    group.add(steer); wheels.push({ steer, spin, front });
   }
+  // Fara nuri (tunda yerda yorug' dog')
+  const beam = new THREE.Mesh(planeG, MAT.beam); beam.rotation.x = -Math.PI / 2; beam.scale.set(w * 2.4, 16, 1); beam.position.set(0, 0.12, frontZ + 8.5);
+  beam.renderOrder = 3; group.add(beam);
 
-  // Faralar
-  const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffee });
-  for (const sx of [-1, 1]) {
-    const hlight = new THREE.Mesh(new THREE.BoxGeometry(w * 0.1, h * 0.07, 0.04), lightMat);
-    hlight.position.set(sx * w * 0.38, h * 0.42, l / 2); group.add(hlight);
-    const tlight = new THREE.Mesh(new THREE.BoxGeometry(w * 0.1, h * 0.06, 0.04),
-      new THREE.MeshBasicMaterial({ color: 0xff3300 }));
-    tlight.position.set(sx * w * 0.38, h * 0.42, -l / 2); group.add(tlight);
+  // Politsiya: ko'k chiziq + mayoq
+  if (isPolice) {
+    const blue = new THREE.MeshStandardMaterial({ color: 0x1b3f9e, roughness: 0.4 });
+    for (const sx of [-1, 1]) bx(blue, 0.02, h * 0.14, l * 0.62, sx * (w / 2 + 0.035), h * 0.42, -l * 0.02);
+    bx(MAT.trim, w * 0.7, 0.07, 0.34, 0, h + 0.07, -l * 0.04);
+    const red = new THREE.MeshBasicMaterial({ color: 0xff2200 }), bl = new THREE.MeshBasicMaterial({ color: 0x1144ff });
+    bx(red, w * 0.32, 0.1, 0.3, -w * 0.18, h + 0.13, -l * 0.04); bx(bl, w * 0.32, 0.1, 0.3, w * 0.18, h + 0.13, -l * 0.04);
+    group.userData.siren = [red, bl];
   }
-
-  // Politsiya — special
-  if (spec === CAR_SPECS.police) {
-    const lightBar = new THREE.Mesh(new THREE.BoxGeometry(w * 0.9, 0.12, 0.3),
-      new THREE.MeshBasicMaterial({ color: 0x222266 }));
-    lightBar.position.set(0, h + 0.06, 0); group.add(lightBar);
-    for (const [sx, col] of [[-1, 0xff0000],[1, 0x0000ff]]) {
-      const fl = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 4),
-        new THREE.MeshBasicMaterial({ color: col }));
-      fl.position.set(sx * w * 0.3, h + 0.1, 0); group.add(fl);
-    }
-  }
-
+  group.userData.wheels = wheels;
+  group.userData.wr = wr;
+  group.userData.spec = s;
+  group.userData.yaw = 0;
   return group;
 }
 
 export function createCar(modelId, colorHex = 0xffffff) {
-  const key = `${modelId}_${colorHex}`;
-  const spec = CAR_SPECS[modelId] || CAR_SPECS.sedan;
-  // Har bir mashina o'z nusxasi bo'lishi kerak (clone emas — to'g'ridan yasaymiz)
-  return makeCarBody(spec, colorHex);
+  return makeCarBody(CAR_SPECS[modelId] ? modelId : 'sedan', colorHex);
+}
+export function getCarSpec(modelId) { return CAR_SPECS[modelId] || CAR_SPECS.sedan; }
+
+// g'ildirak aylanishi, rul, mayoq
+export function animateCar(group, dt, speed, steer = 0, time = 0) {
+  const u = group.userData; if (!u.wheels) return;
+  u.yaw += (-steer * 0.5 - u.yaw) * Math.min(1, dt * 10);
+  for (const w of u.wheels) {
+    w.spin.rotation.x += speed * dt / u.wr;
+    if (w.front) w.steer.rotation.y = u.yaw;
+  }
+  if (u.siren) {
+    const on = Math.sin(time * 14) > 0;
+    u.siren[0].color.setHex(on ? 0xff2200 : 0x330500);
+    u.siren[1].color.setHex(on ? 0x061040 : 0x1a55ff);
+  }
 }
 
-export function getCarSpec(modelId) {
-  return CAR_SPECS[modelId] || CAR_SPECS.sedan;
-}
-
-// ── Random traffic car ────────────────────────────────────────────────────────
-const TRAFFIC_COLORS = [0xcc3333, 0x3355cc, 0x44aa44, 0xcccccc, 0xaaaaaa, 0xeecc44, 0x222222, 0xffffff];
+// ── Tasodifiy transport ──────────────────────────────────────────────────────
+const TRAFFIC_COLORS = [0xf2f2f2, 0xf2f2f2, 0xcfd3d6, 0x2a2e33, 0x1a1a1c, 0x8c1c1c, 0x1c4a8c, 0x6f7479, 0x0f6a3a, 0xe3c34a, 0xa6682a];
 export function randomTrafficCar(rng) {
-  const id = CAR_IDS[Math.floor(rng() * (CAR_IDS.length - 2))]; // -2: police excluded
+  const pool = ['nexia', 'nexia', 'cobalt', 'cobalt', 'lacetti', 'lacetti', 'malibu', 'damas', 'damas', 'matiz', 'sedan', 'suv', 'van'];
+  const id = pool[Math.floor(rng() * pool.length)];
   const color = TRAFFIC_COLORS[Math.floor(rng() * TRAFFIC_COLORS.length)];
   return { id, color };
 }
 
-// ── Mashina rang to'plami ─────────────────────────────────────────────────────
 export const PLAYER_COLORS = [
-  0xff3300, 0x0055ff, 0x00aa44, 0xffcc00, 0xaa00ff,
-  0xff6600, 0x00ccff, 0xffffff, 0x222222,
+  0xd01c1c, 0x1d5fd0, 0x14914a, 0xe6b800, 0x7a1fcf, 0xe0600a, 0x20b8d8, 0xf0f0f0, 0x1c1c1c,
 ];
