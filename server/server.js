@@ -16,6 +16,7 @@ import {
 import { stepGrenade } from '../client/shared/physics.js';
 import { animals, resetAnimals, stepAnimals, damageAnimal, animalBox } from './animals.js';
 import { createPoyga } from './poyga.js';
+import { createTermiz } from './termiz.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_DIR = path.join(__dirname, '..', 'client');
@@ -599,10 +600,12 @@ function lobbyMsg() {
 }
 const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
 const poyga = createPoyga();   // "Poyga" o'yini: /ws2
+const termiz = createTermiz(); // "Termiz GTA" o'yini: /ws3
 httpServer.on('upgrade', (req, socket, head) => {
   const p = (req.url || '').split('?')[0];
   if (p === '/ws') wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   else if (p === '/ws2') poyga.handleUpgrade(req, socket, head);
+  else if (p === '/ws3') termiz.handleUpgrade(req, socket, head);
   else socket.destroy();
 });
 wss.on('connection', (ws) => {
@@ -630,8 +633,3 @@ setInterval(() => {
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`Sariq Hovli serveri ishga tushdi: http://localhost:${PORT}`);
 });
-
-
-// Render bepul tarifida uxlab qolmaslik uchun: har 10 daqiqada o'ziga so'rov yuboradi
-const SELF_URL = process.env.RENDER_EXTERNAL_URL || '';
-if (SELF_URL) setInterval(() => { fetch(SELF_URL + '/healthz').catch(() => {}); }, 10 * 60 * 1000);
