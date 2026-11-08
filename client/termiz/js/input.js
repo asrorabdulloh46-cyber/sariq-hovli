@@ -77,7 +77,7 @@ export class Input {
     });
 
     // Touch joystick
-    const lz = $('ljoy'), rz = $('rjoy');
+    const lz = $('ljoy-zone') || $('ljoy'), rz = $('rjoy-zone') || $('rjoy');
     if (lz) {
       lz.addEventListener('pointerdown', (e) => {
         e.preventDefault(); lz.setPointerCapture(e.pointerId);
@@ -114,7 +114,7 @@ export class Input {
       rz.addEventListener('pointerup', endR); rz.addEventListener('pointercancel', endR);
     }
     // Mashina rul zonasi
-    const st = $('steer');
+    const st = $('steer-zone') || $('steer');
     if (st) {
       const setFrom = (e) => {
         const r = st.getBoundingClientRect(), cx = r.left + r.width/2, hw = r.width/2 - 24;
@@ -134,15 +134,14 @@ export class Input {
       el.addEventListener('pointerup',   () => cb(false));
       el.addEventListener('pointercancel', () => cb(false));
     };
-    hold('gas',   (v) => this.holdGas   = v);
-    hold('brake', (v) => this.holdBrake = v);
+    hold('crbtn-gas',   (v) => this.holdGas   = v);
+    hold('crbtn-brake', (v) => this.holdBrake = v);
     // Action buttons (shoot, interact, jump)
     const tap = (id, act) => { const el = $(id); if (!el) return; el.addEventListener('pointerdown', (e) => { e.preventDefault(); this.onAction(act); el.classList.add('on'); setTimeout(() => el.classList.remove('on'), 120); }); };
-    tap('tjump',    'jump');
-    tap('tattack',  'attack_tap');
-    tap('tinteract','interact');
-    tap('tcam',     'cam');
-    tap('tmenu',    'menu');
+    tap('btn-jump',  'jump');
+    tap('btn-fire',  'attack_tap');
+    tap('btn-enter', 'interact');
+    tap('btn-wpn',   'nextweapon');
   }
 
   consumeYaw()   { const v = this.yawDelta;   this.yawDelta   = 0; return v; }
