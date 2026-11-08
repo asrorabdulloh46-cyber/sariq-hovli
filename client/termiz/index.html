@@ -2,255 +2,199 @@
 <html lang="uz">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
 <title>Termiz GTA</title>
+<script type="importmap">{"imports":{"three":"../vendor/three.module.min.js"}}</script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{width:100%;height:100%;overflow:hidden;background:#111;font-family:'Segoe UI',sans-serif;color:#fff}
-
-/* Canvas */
-#c{display:block;width:100%;height:100%;touch-action:none}
-
-/* Loading */
-#loading{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;background:#111;z-index:100;gap:12px}
-#loading h1{font-size:2rem;font-weight:900;letter-spacing:2px;color:#f90}
-#loading p{color:#aaa;font-size:0.95rem}
-#loading.hide{display:none}
-
-/* Ism ekrani */
-#namescreen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;background:rgba(0,0,0,0.88);z-index:90;gap:14px}
-#namescreen h2{font-size:1.6rem;font-weight:800;color:#f90;letter-spacing:1px}
-#namescreen input{padding:10px 16px;font-size:1.1rem;border:2px solid #f90;border-radius:8px;
-  background:#222;color:#fff;outline:none;width:220px;text-align:center}
-#namescreen select{padding:9px 14px;font-size:1rem;border:2px solid #666;border-radius:8px;
-  background:#222;color:#fff;outline:none;width:220px}
-#startbtn{padding:11px 32px;font-size:1.1rem;font-weight:700;background:#f90;color:#000;
-  border:none;border-radius:9px;cursor:pointer;letter-spacing:1px;transition:opacity 0.2s}
-#startbtn:hover{opacity:0.85}
-#namescreen.hide{display:none}
-
-/* HUD */
-#hud{position:fixed;inset:0;pointer-events:none;z-index:50;display:none}
-#hud.hide{display:none!important}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+:root{--sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px);--st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px);
+  --gold:#ffb43a;--ink:#0b0f14;--glass:rgba(10,14,20,.55);--line:rgba(255,255,255,.22)}
+html,body{width:100%;height:100%;overflow:hidden;background:#0b0f14;font-family:'Segoe UI',system-ui,Roboto,sans-serif;color:#fff;touch-action:none;overscroll-behavior:none}
+#c{display:block;width:100%;height:100%;touch-action:none;outline:none}
 .hide{display:none!important}
 
-/* Sog'liq */
-#hp{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
-  font-size:1.5rem;font-weight:800;text-shadow:0 2px 6px #000;color:#ff8888}
+/* ── Yuklanish ── */
+#loading{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  background:radial-gradient(120% 90% at 50% 20%,#17324a 0%,#0b0f14 70%)}
+#loading h1{font-size:clamp(1.6rem,6vw,2.6rem);font-weight:900;letter-spacing:.2em;color:var(--gold);text-shadow:0 4px 24px rgba(255,180,58,.35)}
+#loading .sub{color:#9fb3c4;font-size:.9rem;letter-spacing:.08em}
+#loadbar{width:min(320px,70vw);height:6px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden}
+#loadbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ffb43a,#ffd98a);transition:width .25s}
+#loadtxt{color:#c9d6e0;font-size:.85rem;min-height:1.2em}
 
-/* Tezlik */
-#speed{position:absolute;bottom:14px;right:14px;font-size:1.1rem;
-  font-weight:700;color:#fff;text-shadow:0 2px 4px #000;text-align:right}
+/* ── Ism ekrani ── */
+#namescreen{position:fixed;inset:0;z-index:90;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  background:linear-gradient(180deg,rgba(8,14,22,.55),rgba(8,14,22,.9));padding:calc(12px + var(--st)) 16px calc(12px + var(--sb))}
+#namescreen h2{font-size:clamp(1.3rem,5vw,1.9rem);font-weight:900;color:var(--gold);letter-spacing:.12em}
+#namescreen p{color:#b7c6d3;font-size:.82rem;text-align:center;max-width:420px;line-height:1.4}
+#namescreen input,#namescreen select{padding:11px 16px;font-size:1.05rem;border:2px solid var(--gold);border-radius:12px;background:rgba(20,26,34,.95);color:#fff;outline:none;width:min(260px,80vw);text-align:center;user-select:text;-webkit-user-select:text}
+#namescreen select{border-color:#4a5a6a}
+#startbtn{padding:13px 40px;font-size:1.1rem;font-weight:800;background:linear-gradient(180deg,#ffc45a,#ff9e1a);color:#1a1000;border:none;border-radius:14px;cursor:pointer;letter-spacing:.06em;box-shadow:0 8px 24px rgba(255,160,20,.35)}
+#startbtn:active{transform:scale(.97)}
 
-/* Wanted */
-#wantedlevel{position:absolute;top:14px;right:14px;font-size:1.6rem;
-  color:#ffaa00;text-shadow:0 2px 6px #000;letter-spacing:2px}
+/* ── HUD ── */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:50;display:none}
+#hud>*{position:absolute}
+.glass{background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 
-/* Qurol */
-#weaponhud{position:absolute;bottom:60px;right:14px;text-align:right}
-#weapon{font-size:0.95rem;color:#ccc;text-shadow:0 1px 4px #000}
-#ammo{font-size:1.3rem;font-weight:800;color:#fff;text-shadow:0 2px 6px #000}
+#mapwrap{left:calc(10px + var(--sl));top:calc(10px + var(--st));width:clamp(104px,22vh,150px);height:clamp(104px,22vh,150px);border-radius:50%;overflow:hidden;
+  border:3px solid rgba(255,255,255,.55);box-shadow:0 4px 18px rgba(0,0,0,.5);background:#1c2a2f}
+#minimap{width:100%;height:100%;display:block}
+#compass{position:absolute;left:50%;top:4px;transform:translateX(-50%);font-size:.7rem;font-weight:800;color:#fff;text-shadow:0 1px 3px #000;background:rgba(200,30,30,.9);border-radius:8px;padding:0 6px;pointer-events:none}
+#place{left:calc(10px + var(--sl));top:calc(clamp(104px,22vh,150px) + 16px + var(--st));max-width:46vw;font-size:.78rem;font-weight:700;letter-spacing:.04em;text-shadow:0 1px 4px #000;color:#fff;opacity:.95}
+#place small{display:block;font-weight:500;color:#cfe0ee;opacity:.85}
 
-/* Ping */
-#ping{position:absolute;top:14px;left:14px;font-size:0.75rem;color:#888}
+#wantedlevel{right:calc(12px + var(--sr));top:calc(10px + var(--st));font-size:1.5rem;color:#ffb43a;text-shadow:0 2px 6px #000;letter-spacing:2px;min-height:1.6rem}
+#ping{right:calc(12px + var(--sr));top:calc(40px + var(--st));font-size:.7rem;color:#a8b8c6}
+#clock{right:calc(12px + var(--sr));top:calc(54px + var(--st));font-size:.78rem;color:#e9f1f7;text-shadow:0 1px 4px #000;font-variant-numeric:tabular-nums}
+#topbtns{right:calc(12px + var(--sr));top:calc(78px + var(--st));display:flex;flex-direction:column;gap:8px}
 
-/* Minimap */
-#minimap{position:absolute;top:40px;left:14px;border:2px solid rgba(255,255,255,0.25);
-  border-radius:4px;image-rendering:pixelated}
+#vitals{left:50%;bottom:calc(10px + var(--sb));transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px;width:min(220px,34vw)}
+#hpbar{width:100%;height:10px;border-radius:6px;overflow:hidden;background:rgba(0,0,0,.55);border:1px solid var(--line)}
+#hpbar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#e03a3a,#ff7b6b);transition:width .15s}
+#hp{font-size:.95rem;font-weight:800;text-shadow:0 2px 6px #000;color:#ffd0c8}
+#speed{font-size:1.15rem;font-weight:800;text-shadow:0 2px 6px #000;display:none}
+body.inCar #speed{display:block}
 
-/* Toast */
-#toast{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  background:rgba(0,0,0,0.75);color:#fff;padding:9px 18px;border-radius:8px;
-  font-size:0.95rem;text-align:center;pointer-events:none;opacity:0;
-  transition:opacity 0.3s;max-width:70vw}
+#weaponhud{right:calc(14px + var(--sr));top:calc(110px + var(--st));text-align:right;padding:6px 12px;border-radius:12px}
+body.touch #weaponhud{top:calc(10px + var(--st));right:calc(70px + var(--sr))}
+#weapon{font-size:.8rem;color:#cfe0ee}
+#ammo{font-size:1.2rem;font-weight:900;text-shadow:0 2px 6px #000}
+body.inCar #weaponhud{display:none}
+
+#toast{left:50%;top:18%;transform:translateX(-50%);background:rgba(8,12,18,.78);color:#fff;padding:9px 18px;border-radius:12px;font-size:.92rem;text-align:center;opacity:0;transition:opacity .3s;max-width:70vw;border:1px solid var(--line)}
 #toast.on{opacity:1}
 
-/* Touch: joystick konteyner */
-#ljoy-zone,#rjoy-zone{position:absolute;bottom:0;width:50%;height:220px;
-  pointer-events:all;touch-action:none;display:none}
-#ljoy-zone{left:0}
-#rjoy-zone{right:0}
-body.touch #ljoy-zone,body.touch #rjoy-zone{display:block}
+.rbtn{pointer-events:auto;touch-action:none;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.15rem;cursor:pointer;
+  background:var(--glass);border:1.5px solid var(--line)}
+.rbtn:active,.rbtn.on{background:rgba(255,180,58,.55)}
 
-/* Joystick ko'rsatkich */
-.jpad{position:absolute;border-radius:50%;background:rgba(255,255,255,0.08);
-  border:2px solid rgba(255,255,255,0.18);pointer-events:none;transform:translate(-50%,-50%)}
-.jpad.base{width:90px;height:90px}
-.jpad.knob{width:42px;height:42px;background:rgba(255,255,255,0.22)}
+/* ── Sensorli boshqaruv ── */
+#touchui{inset:0;display:none}
+body.touch #touchui{display:block}
+#lookzone{position:absolute;right:0;top:0;width:58%;height:100%;pointer-events:auto;touch-action:none}
+#stickzone{position:absolute;left:0;bottom:0;width:46%;height:76%;pointer-events:auto;touch-action:none}
+#stick{position:absolute;width:128px;height:128px;margin:-64px 0 0 -64px;border-radius:50%;pointer-events:none;
+  left:calc(24px + 64px + var(--sl));top:calc(100% - 24px - 64px - var(--sb));
+  background:radial-gradient(circle,rgba(255,255,255,.10),rgba(255,255,255,.04));border:2px solid rgba(255,255,255,.42);box-shadow:0 0 0 6px rgba(0,0,0,.12),inset 0 0 18px rgba(0,0,0,.25)}
+#stick::before{content:"";position:absolute;inset:14px;border-radius:50%;border:1.5px dashed rgba(255,255,255,.18)}
+#stick .jk{position:absolute;left:50%;top:50%;width:58px;height:58px;margin:-29px 0 0 -29px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.75),rgba(255,255,255,.35));border:2px solid rgba(255,255,255,.7);box-shadow:0 4px 12px rgba(0,0,0,.45)}
+#stick.active{background:radial-gradient(circle,rgba(255,255,255,.16),rgba(255,255,255,.06))}
+.abtn{position:absolute;pointer-events:auto;touch-action:none;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-direction:column;
+  background:rgba(12,16,22,.52);border:2px solid rgba(255,255,255,.4);color:#fff;font-weight:800;text-shadow:0 1px 3px #000;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.abtn:active,.abtn.on{background:rgba(255,180,58,.6);border-color:#ffd98a;transform:scale(.95)}
+.abtn small{font-size:.58rem;font-weight:700;opacity:.9;margin-top:1px;letter-spacing:.04em}
+#btn-fire{width:84px;height:84px;right:calc(26px + var(--sr));bottom:calc(26px + var(--sb));font-size:1.9rem;background:rgba(190,40,40,.5);border-color:rgba(255,160,150,.8)}
+#btn-jump{width:62px;height:62px;right:calc(124px + var(--sr));bottom:calc(20px + var(--sb));font-size:1.4rem}
+#btn-enter{width:62px;height:62px;right:calc(30px + var(--sr));bottom:calc(124px + var(--sb));font-size:1.4rem}
+#btn-wpn{width:50px;height:50px;right:calc(112px + var(--sr));bottom:calc(92px + var(--sb));font-size:1.15rem}
+#btn-run{width:50px;height:50px;right:calc(190px + var(--sr));bottom:calc(40px + var(--sb));font-size:1.05rem}
+#btn-gas{width:92px;height:92px;right:calc(26px + var(--sr));bottom:calc(26px + var(--sb));font-size:1.5rem;background:rgba(30,150,80,.5);border-color:rgba(160,255,200,.8)}
+#btn-brake{width:70px;height:70px;right:calc(130px + var(--sr));bottom:calc(26px + var(--sb));font-size:1.2rem;background:rgba(190,50,40,.5);border-color:rgba(255,170,150,.7)}
+#btn-hand{width:50px;height:50px;right:calc(210px + var(--sr));bottom:calc(32px + var(--sb));font-size:.95rem}
+.footonly,.caronly{display:none}
+body:not(.inCar) .footonly{display:flex}
+body.inCar .caronly{display:flex}
 
-/* Touch: steer zone */
-#steer-zone{position:absolute;top:0;left:50%;width:50%;height:calc(100% - 220px);
-  pointer-events:all;touch-action:none;display:none}
-body.touch #steer-zone{display:block}
+/* klaviatura maslahati (kompyuter) */
+#hint{left:50%;bottom:calc(64px + var(--sb));transform:translateX(-50%);font-size:.72rem;color:#d8e4ee;text-shadow:0 1px 3px #000;opacity:.8;white-space:nowrap}
+body.touch #hint{display:none}
 
-/* Touch tugmalar */
-#touch-btns{position:absolute;bottom:0;right:50%;width:50%;height:220px;
-  display:none;pointer-events:all}
-body.touch #touch-btns{display:flex;align-items:center;justify-content:flex-end;
-  gap:10px;padding:0 14px}
-.tbtn{width:52px;height:52px;border-radius:50%;border:2px solid rgba(255,255,255,0.3);
-  background:rgba(0,0,0,0.5);color:#fff;font-size:1.3rem;display:flex;
-  align-items:center;justify-content:center;cursor:pointer;user-select:none;
-  -webkit-user-select:none;touch-action:none}
-.tbtn:active{background:rgba(255,200,0,0.4)}
+/* nishon */
+#crosshair{z-index:60}
 
-/* E tugmasi / enter-exit car */
-#btn-enter{position:absolute;right:14px;bottom:230px;pointer-events:all}
-body.touch #btn-enter{display:flex}
-
-/* Mashina gaz/tormoz */
-#car-controls{position:absolute;bottom:0;right:0;width:50%;height:220px;
-  display:none;align-items:center;justify-content:flex-end;gap:16px;padding:0 20px;
-  pointer-events:none}
-body.touch.inCar #car-controls{display:flex;pointer-events:all}
-
-.crbtn{width:64px;height:64px;border-radius:12px;border:2px solid rgba(255,255,255,0.3);
-  background:rgba(0,0,0,0.5);color:#fff;font-size:0.85rem;font-weight:700;
-  display:flex;align-items:center;justify-content:center;user-select:none;touch-action:none}
-.crbtn:active{background:rgba(255,200,0,0.4)}
-
-/* Xarita overlay */
-#mapview{position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:60;
-  display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px}
+/* xarita overlay */
+#mapview{position:fixed;inset:0;background:rgba(5,9,14,.92);z-index:60;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px}
 #mapview.on{display:flex}
-#mapview h3{color:#f90;font-size:1.2rem}
-#bigmap{border:2px solid #444;border-radius:4px}
+#mapview h3{color:var(--gold);font-size:1.1rem;letter-spacing:.08em}
+#bigmap{border:2px solid #3b4a58;border-radius:10px;max-width:92vw;max-height:70vh}
 
-/* O'lik ekrani */
-#deathscreen{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:80;
-  display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px}
+#deathscreen{position:fixed;inset:0;background:radial-gradient(circle,rgba(120,0,0,.35),rgba(0,0,0,.82));z-index:80;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px}
 #deathscreen.on{display:flex}
-#deathscreen h2{font-size:2rem;color:#ff4444;font-weight:900}
-#respawnbtn{padding:11px 28px;font-size:1.1rem;font-weight:700;background:#f90;color:#000;
-  border:none;border-radius:9px;cursor:pointer}
+#deathscreen h2{font-size:2.2rem;color:#ff5a4a;font-weight:900;letter-spacing:.12em}
+#respawnbtn{padding:12px 30px;font-size:1.05rem;font-weight:800;background:linear-gradient(180deg,#ffc45a,#ff9e1a);color:#1a1000;border:none;border-radius:12px;cursor:pointer}
 
-/* Chat */
-#chatbox{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
-  display:none;background:rgba(0,0,0,0.7);border-radius:8px;overflow:hidden}
-#chatbox input{padding:9px 14px;font-size:0.95rem;background:transparent;
-  color:#fff;border:none;outline:none;width:280px}
-#chatbox.on{display:block;pointer-events:all}
+#chatbox{left:50%;bottom:calc(14px + var(--sb));transform:translateX(-50%);display:none;background:rgba(0,0,0,.7);border-radius:10px;overflow:hidden}
+#chatbox input{padding:9px 14px;font-size:.95rem;background:transparent;color:#fff;border:none;outline:none;width:280px;user-select:text;-webkit-user-select:text}
+#chatbox.on{display:block;pointer-events:auto}
+.nametag{position:fixed;pointer-events:none;z-index:40;transform:translate(-50%,-100%);font-size:.72rem;font-weight:700;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000;white-space:nowrap}
 </style>
 </head>
 <body>
-<!-- Loading -->
 <div id="loading">
   <h1>TERMIZ GTA</h1>
-  <p id="loadtxt">Xarita yuklanmoqda…</p>
+  <div class="sub">Hakim at-Termiziy · Termiz shahri</div>
+  <div id="loadbar"><i></i></div>
+  <div id="loadtxt">Xarita yuklanmoqda…</div>
 </div>
 
-<!-- Canvas -->
-<canvas id="c"></canvas>
+<canvas id="c" tabindex="-1"></canvas>
 
-<!-- Ism ekrani -->
-<div id="namescreen">
-  <h2>🚗 Termiz GTA</h2>
+<div id="namescreen" class="hide">
+  <h2>🕌 TERMIZ GTA</h2>
+  <p>Do'stlar bilan Termiz ko'chalarida: yuring, mashina haydang. Asosiy maydon — Hakim at-Termiziy masjidi.</p>
   <input id="nameinput" maxlength="20" placeholder="Ismingiz" autocomplete="off" spellcheck="false">
   <select id="colorsel">
-    <option value="0">🔴 Qizil</option>
-    <option value="1">🔵 Ko'k</option>
-    <option value="2">🟢 Yashil</option>
-    <option value="3">🟡 Sariq</option>
-    <option value="4">🟣 Binafsha</option>
-    <option value="5">🟠 To'q sariq</option>
-    <option value="6">⚪ Oq</option>
-    <option value="7">⚫ Qora</option>
+    <option value="0">🔴 Qizil</option><option value="1">🔵 Ko'k</option><option value="2">🟢 Yashil</option>
+    <option value="3">🟡 Sariq</option><option value="4">🟣 Binafsha</option><option value="5">🟠 To'q sariq</option>
+    <option value="6">⚪ Oq</option><option value="7">⚫ Qora</option>
   </select>
   <button id="startbtn">O'ynash →</button>
 </div>
 
-<!-- HUD -->
 <div id="hud">
-  <!-- Wanted yulduzlari -->
+  <div id="mapwrap"><canvas id="minimap" width="300" height="300"></canvas><div id="compass">N</div></div>
+  <div id="place"></div>
   <div id="wantedlevel"></div>
-  <!-- Ping -->
   <div id="ping"></div>
-  <!-- Minimap -->
-  <canvas id="minimap" width="160" height="120"></canvas>
-  <!-- Sog'liq -->
-  <div id="hp">❤ 100</div>
-  <!-- Tezlik -->
-  <div id="speed">0 km/h</div>
-  <!-- Qurol -->
-  <div id="weaponhud">
-    <div id="weapon">Mushtlash</div>
-    <div id="ammo">∞</div>
+  <div id="clock"></div>
+  <div id="topbtns">
+    <div class="rbtn" id="btn-map">🗺</div>
+    <div class="rbtn" id="btn-cam">🎥</div>
   </div>
-  <!-- Toast xabar -->
+  <div id="weaponhud" class="glass"><div id="weapon">Mushtlash</div><div id="ammo">∞</div></div>
+  <div id="vitals"><div id="hpbar"><i></i></div><div id="hp">❤ 100</div><div id="speed">0 km/h</div></div>
   <div id="toast"></div>
+  <div id="hint">WASD — yurish · Sichqon — qarash · Shift — yugurish · Space — sakrash · E — mashina · F — otish · G — qurol · V — kamera · M — xarita</div>
 
-  <!-- Touch joysticklar -->
-  <div id="ljoy-zone">
-    <div class="jpad base" id="ljoy-base" style="display:none;position:absolute"></div>
-    <div class="jpad knob" id="ljoy-knob" style="display:none;position:absolute"></div>
-  </div>
-  <div id="rjoy-zone">
-    <div class="jpad base" id="rjoy-base" style="display:none;position:absolute"></div>
-    <div class="jpad knob" id="rjoy-knob" style="display:none;position:absolute"></div>
-  </div>
-
-  <!-- Steering zone (mashina) -->
-  <div id="steer-zone"></div>
-
-  <!-- Touch tugmalar (piyoda) -->
-  <div id="touch-btns">
-    <div class="tbtn" id="btn-jump" data-action="jump">↑</div>
-    <div class="tbtn" id="btn-fire" data-action="attack_tap">🔫</div>
-    <div class="tbtn" id="btn-enter" data-action="interact">🚗</div>
-    <div class="tbtn" id="btn-wpn" data-action="nextweapon">⚙</div>
-  </div>
-
-  <!-- Mashina gaz/tormoz -->
-  <div id="car-controls">
-    <div class="crbtn" id="crbtn-brake">⬇<br><small>Tormoz</small></div>
-    <div class="crbtn" id="crbtn-gas">⬆<br><small>Gaz</small></div>
+  <div id="touchui">
+    <div id="lookzone"></div>
+    <div id="stickzone"></div>
+    <div id="stick"><div class="jk"></div></div>
+    <div class="abtn footonly" id="btn-fire">🔫</div>
+    <div class="abtn footonly" id="btn-jump">⤒<small>SAKRA</small></div>
+    <div class="abtn" id="btn-enter">🚗<small>KIR</small></div>
+    <div class="abtn footonly" id="btn-wpn">⚙</div>
+    <div class="abtn footonly" id="btn-run">🏃</div>
+    <div class="abtn caronly" id="btn-gas">▲<small>GAZ</small></div>
+    <div class="abtn caronly" id="btn-brake">▼<small>TORMOZ</small></div>
+    <div class="abtn caronly" id="btn-hand">⛔<small>RUCHNOY</small></div>
   </div>
 </div>
 
-<!-- O'lik ekrani -->
-<div id="deathscreen">
-  <h2>O'ldingiz</h2>
-  <button id="respawnbtn">Qayta tug'ilish (R)</button>
-</div>
-
-<!-- Chat -->
+<div id="deathscreen"><h2>O'LDINGIZ</h2><button id="respawnbtn">Qayta tug'ilish (R)</button></div>
 <div id="chatbox"><input id="chatinput" placeholder="Xabar yozing…" maxlength="100"></div>
-
-<!-- Xarita view -->
-<div id="mapview">
-  <h3>Termiz xaritasi</h3>
-  <canvas id="bigmap" width="600" height="400"></canvas>
-  <small style="color:#666">M — yopish</small>
-</div>
+<div id="mapview"><h3>TERMIZ</h3><canvas id="bigmap" width="720" height="480"></canvas><small style="color:#7d8d9b">M — yopish</small></div>
 
 <script type="module" src="./game.js"></script>
 <script>
-// Loading xabarini game.js yuklanishi bilan o'chirish
 window.addEventListener('load', () => {
-  // map.json yuklanayotganda loading ko'rinadi
-  // game.js ichida map.json fetch qilingandan keyin loading div yashiriladi
   setTimeout(() => {
     const ld = document.getElementById('loading');
     if (ld && !ld.classList.contains('hide')) {
-      document.getElementById('loadtxt').textContent = 'Tayyor bo\'lishini kutayapti…';
+      const t = document.getElementById('loadtxt');
+      if (t && t.textContent.indexOf('yuklanmoqda') >= 0) t.textContent = 'Yuklanmoqda…';
     }
-  }, 500);
+  }, 600);
 });
-
-// Respawn tugmasi
-document.getElementById('respawnbtn').addEventListener('click', () => {
-  window._gameRespawn && window._gameRespawn();
+window._onDead = () => document.getElementById('deathscreen').classList.add('on');
+window._onAlive = () => document.getElementById('deathscreen').classList.remove('on');
+window.addEventListener('error', (e) => {
+  const t = document.getElementById('loadtxt');
+  if (t && !document.getElementById('loading').classList.contains('hide')) t.textContent = 'Xato: ' + (e.message || e);
 });
-
-// Dead state hook — game.js dan chaqiriladi
-window._onDead = () => {
-  document.getElementById('deathscreen').classList.add('on');
-};
-window._onAlive = () => {
-  document.getElementById('deathscreen').classList.remove('on');
-};
 </script>
 </body>
 </html>
