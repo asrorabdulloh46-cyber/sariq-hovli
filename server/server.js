@@ -306,7 +306,7 @@ function stepBots(dt, t) {
       } else b.tgt = -1;
       // tiqilib qoldimi?
       if (t >= b.stuckAt) {
-        if (Math.hypot(b.x - b.stuckX, b.z - b.stuckZ) < 0.4 && b.tgt < 0) { pickWaypoint(b); b.jump = true; }
+        if (Math.hypot(b.x - b.stuckX, b.z - b.stuckZ) < 0.4 && b.tgt < 0) { pickWaypoint(b); }   // sakramaydi (deraza tokchasiga chiqib qolmasin)
         b.stuckAt = t + 1500; b.stuckX = b.x; b.stuckZ = b.z;
       }
     }
