@@ -266,8 +266,11 @@ export function buildWorld() {
     hay: [matHay, { local: true, color: [1, 1, 1], seed: 18, ao: false }],
     fence: [matPlank, { tile: 1.5, color: [1, 1, 1], seed: 19, ao: false }],
     well: [matStone, { tile: 1, color: [1, 1, 1], seed: 20, ao: false }],
+    parapet: [matBrick, { tile: 2, color: [0.9, 0.82, 0.68], seed: 21, ao: false }],
+    tankc: [matPlain, { color: [0.55, 0.6, 0.63], seed: 22, ao: false }],
   };
-  const DECOR_COLOR = { trim: [0.46, 0.31, 0.18], awning: [0.62, 0.2, 0.17], tank: [0.5, 0.55, 0.58], roofedge: [0.55, 0.34, 0.26], wood: [0.45, 0.3, 0.16] };
+  const DECOR_COLOR = { trim: [0.46, 0.31, 0.18], awning: [0.62, 0.2, 0.17], tank: [0.5, 0.55, 0.58], roofedge: [0.55, 0.34, 0.26], wood: [0.45, 0.3, 0.16],
+    liftdoor: [0.62, 0.66, 0.7], liftframe: [0.32, 0.34, 0.37], band: [0.78, 0.66, 0.46] };
 
   // xaritaga bog'liq qism (binolar, yashiklar, dori qutilari): xarita almashganda qayta quriladi
   const mapGroup = new THREE.Group(); scene.add(mapGroup);

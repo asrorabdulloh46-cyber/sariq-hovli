@@ -1,7 +1,7 @@
 // Silliq 3D modellar: odam (ismi peshona bog'ichida va orqa yelkasida), qurollar, granatalar, buqa va cho'chqa.
 // Hamma narsa kod bilan yaratiladi: kapsula, shar, silindr va yumaloq qirrali qutilar.
 import * as THREE from '../vendor/three.module.min.js';
-import { COLORS } from '../shared/consts.js';
+import { ALL_COLORS as COLORS, BOT0 } from '../shared/consts.js';
 
 // ---------------- Yordamchi: tekstura va geometriya ----------------
 function tex(size, draw, repeat = true) {
@@ -297,16 +297,18 @@ export function nameTexture(text, { bg = null, fg = '#fff', stroke = '#000', w =
 }
 
 // Bosh: sferik, yuz tekstura bilan (yuz -z tomonda, ya'ni u = 0.75)
-function faceTexture() {
+function faceTexture(skin = '#e0ac86', mask = null, beard = null) {
   const W = 512, Hh = 256;
   const c = document.createElement('canvas'); c.width = W; c.height = Hh;
   const g = c.getContext('2d');
-  g.fillStyle = '#e0ac86'; g.fillRect(0, 0, W, Hh);
+  g.fillStyle = mask || skin; g.fillRect(0, 0, W, Hh);
+  if (mask) { g.fillStyle = skin; g.beginPath(); g.ellipse(W * 0.75, 116, 58, 20, 0, 0, 6.3); g.fill(); }   // niqobda ko'z teshigi
   const cx = W * 0.75;
   const gr = g.createRadialGradient(cx, 134, 6, cx, 134, 80);
   gr.addColorStop(0, 'rgba(255,214,184,0.5)'); gr.addColorStop(1, 'rgba(224,172,134,0)');
   g.fillStyle = gr; g.fillRect(cx - 90, 40, 180, 190);
-  { const bgd = g.createRadialGradient(cx, 168, 4, cx, 168, 46); bgd.addColorStop(0, 'rgba(70,40,20,0.16)'); bgd.addColorStop(1, 'rgba(70,40,20,0)'); g.fillStyle = bgd; g.fillRect(cx - 60, 120, 120, 100); }   // soqol soyasi
+  if (!mask) { const bgd = g.createRadialGradient(cx, 168, 4, cx, 168, 46); bgd.addColorStop(0, 'rgba(70,40,20,0.16)'); bgd.addColorStop(1, 'rgba(70,40,20,0)'); g.fillStyle = bgd; g.fillRect(cx - 60, 120, 120, 100); }   // soqol soyasi
+  if (beard && !mask) { g.fillStyle = beard; g.beginPath(); g.moveTo(cx - 62, 128); g.quadraticCurveTo(cx - 60, 225, cx, 236); g.quadraticCurveTo(cx + 60, 225, cx + 62, 128); g.lineTo(cx + 46, 132); g.quadraticCurveTo(cx + 30, 190, cx, 192); g.quadraticCurveTo(cx - 30, 190, cx - 46, 132); g.closePath(); g.fill(); g.fillRect(cx - 22, 160, 44, 7); }
   for (const s of [-1, 1]) {
     const ex = cx + s * 30;
     g.fillStyle = '#fff'; g.beginPath(); g.ellipse(ex, 118, 13, 8, 0, 0, 6.3); g.fill();
@@ -317,6 +319,7 @@ function faceTexture() {
     g.moveTo(ex - 14, 102 + (s > 0 ? 2 : 0)); g.lineTo(ex + 14, 99 + (s > 0 ? 0 : 3)); g.stroke();
     g.strokeStyle = 'rgba(120,70,40,0.35)'; g.lineWidth = 2; g.beginPath(); g.arc(ex, 124, 14, 0.2, 2.9); g.stroke();
   }
+  if (mask) { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
   g.fillStyle = 'rgba(150,90,60,0.55)'; g.beginPath(); g.ellipse(cx, 146, 7, 9, 0, 0, 6.3); g.fill();   // burun
   g.fillStyle = 'rgba(100,60,40,0.55)'; g.beginPath(); g.ellipse(cx - 5, 154, 2.5, 2, 0, 0, 6.3); g.ellipse(cx + 5, 154, 2.5, 2, 0, 0, 6.3); g.fill();
   g.strokeStyle = '#7a3a2c'; g.lineWidth = 3.5; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx - 14, 172); g.quadraticCurveTo(cx, 177, cx + 14, 172); g.stroke();
@@ -324,6 +327,22 @@ function faceTexture() {
   return t;
 }
 const faceMat = new THREE.MeshLambertMaterial({ map: faceTexture() });
+// ---- Har bir o'yinchining o'z ko'rinishi: teri, soch, bosh kiyimi, soqol, shim ----
+const LOOKS = [
+  { skin: '#e0ac86', hair: 0x1d1510, hat: 'none', beard: null, pants: 'camo', vest: 0x3b3f33 },        // Tohir
+  { skin: '#c98f64', hair: 0x15100c, hat: 'cap', beard: '#2a1a10', pants: 'jeans', vest: 0x2f3a46 },  // Abdulatif
+  { skin: '#eab896', hair: 0x4a2e19, hat: 'none', beard: '#3a2414', pants: 'black', vest: 0x463826 }, // Asror
+  { skin: '#d49c74', hair: 0x0f0b08, hat: 'beanie', beard: null, pants: 'khaki', vest: 0x353d2c },    // Muhammad
+  { skin: '#b97f58', hair: 0x1a120c, hat: 'cap', beard: null, pants: 'camo', vest: 0x4a2e2e },        // Sunnatulloh
+];
+const BOT_LOOK = { skin: '#c9946c', hair: 0x111111, hat: 'helmet', mask: '#1c1d1f', pants: 'camo', vest: 0x4b5034 };
+const matCache = new Map();
+const cachedMat = (key, make) => { let m = matCache.get(key); if (!m) { m = make(); matCache.set(key, m); } return m; };
+const jeansTex = tex(64, (g, S) => { g.fillStyle = '#3a5a86'; g.fillRect(0, 0, S, S); for (let i = 0; i < S; i += 2) { g.fillStyle = `rgba(255,255,255,${0.04 + Math.random() * 0.05})`; g.fillRect(i, 0, 1, S); } noise(g, S, 200, 0.08); });
+function pantsMat(kind) {
+  return cachedMat('p' + kind, () => kind === 'camo' ? matPants : kind === 'jeans' ? new THREE.MeshLambertMaterial({ map: jeansTex })
+    : new THREE.MeshLambertMaterial({ color: kind === 'black' ? 0x26272b : 0x8a7a55, map: fabricTex }));
+}
 const GUN_IDS = ['pistol', 'rifle', 'smg', 'shotgun', 'sniper'];
 
 
@@ -354,6 +373,13 @@ const TPS_HOLD = {
 // ---------------- Odam ----------------
 export function createPlayerModel(id, name) {
   const color = COLORS[id];
+  const isB = id >= BOT0;
+  const look = isB ? BOT_LOOK : LOOKS[id % LOOKS.length];
+  const matPants = pantsMat(look.pants);
+  const matVest = cachedMat('v' + look.vest, () => new THREE.MeshLambertMaterial({ color: look.vest, map: fabricTex }));
+  const matSkinD = cachedMat('s' + look.skin, () => new THREE.MeshLambertMaterial({ color: new THREE.Color(look.skin).multiplyScalar(0.9) }));
+  const matHair = cachedMat('h' + look.hair, () => new THREE.MeshLambertMaterial({ color: look.hair }));
+  const myFace = cachedMat('f' + look.skin + (look.mask || '') + (look.beard || ''), () => new THREE.MeshLambertMaterial({ map: faceTexture(look.skin, look.mask, look.beard) }));
   const matBody = new THREE.MeshLambertMaterial({ color, map: fabricTex });
   const root = new THREE.Group();
   const body = new THREE.Group(); root.add(body);
@@ -405,10 +431,25 @@ export function createPlayerModel(id, name) {
 
   // bosh (sfera, yuz teksturasi)
   const head = new THREE.Group(); head.position.set(0, 0.815, 0); head.scale.setScalar(1.12); upper.add(head);
-  const hm = new THREE.Mesh(geo('head', () => new THREE.SphereGeometry(0.125, 26, 20)), faceMat);
+  const hm = new THREE.Mesh(geo('head', () => new THREE.SphereGeometry(0.125, 26, 20)), myFace);
   hm.scale.set(0.94, 1.1, 1.0); head.add(hm);
   const hair = new THREE.Mesh(geo('hair', () => new THREE.SphereGeometry(0.134, 26, 16, 0, Math.PI * 2, 0, 1.72)), matHair);
   hair.scale.set(0.96, 1.1, 1.04); hair.rotation.x = 0.32; head.add(hair);
+  // bosh kiyimi
+  const hatMat = cachedMat('hat' + (isB ? 'b' : color), () => new THREE.MeshLambertMaterial({ color: isB ? 0x4d5236 : new THREE.Color(color).multiplyScalar(0.8), map: isB ? camoTex : fabricTex }));
+  if (look.hat === 'cap') {
+    const cp = new THREE.Mesh(geo('capdome', () => new THREE.SphereGeometry(0.142, 22, 12, 0, Math.PI * 2, 0, 1.45)), hatMat);
+    cp.scale.set(0.98, 0.95, 1.04); cp.position.y = 0.035; head.add(cp);
+    head.add(rb(0.2, 0.014, 0.12, 0, 0.055, -0.16, hatMat, 0.006));                           // kozirek
+  } else if (look.hat === 'beanie') {
+    const bn = new THREE.Mesh(geo('beanie', () => new THREE.SphereGeometry(0.143, 22, 12, 0, Math.PI * 2, 0, 1.5)), hatMat);
+    bn.scale.set(0.98, 1.12, 1.04); bn.position.y = 0.04; head.add(bn);
+    head.add(sph(0.032, 0, 0.2, 0, hatMat));
+  } else if (look.hat === 'helmet') {
+    const hl = new THREE.Mesh(geo('helmet', () => new THREE.SphereGeometry(0.158, 22, 12, 0, Math.PI * 2, 0, 1.52)), hatMat);
+    hl.scale.set(1.0, 0.92, 1.06); hl.position.y = 0.068; head.add(hl);
+    head.add(rb(0.05, 0.03, 0.02, 0, 0.12, -0.165, matBlack, 0.008));                         // tungi ko'zoynak tutqichi
+  }
   head.add(sph(0.026, -0.12, -0.005, 0.0, matSkinD, 0.6, 1.1, 0.9)); head.add(sph(0.026, 0.12, -0.005, 0.0, matSkinD, 0.6, 1.1, 0.9));   // quloqlar
 
   // PESHONA BOG'ICHI: ism old va orqa tomonda (silindr atrofida)
