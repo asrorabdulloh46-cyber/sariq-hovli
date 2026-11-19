@@ -13,7 +13,7 @@ export const SPAWNS = [];
 export const PICKUPS = [];
 export const MAP = { id: -1 };
 export const MAP_NAMES = ['Sariq Hovli', 'Ochiq maydon', 'Qishloq'];
-export const MAP_DESC = ['2 ta 3 qavatli bino va hovli', 'Binosiz katta maydon, konteynerlar', 'Uylar, tomlar, pichan, hayvonlar'];
+export const MAP_DESC = ['2 ta 20 qavatli bino (lift bor) va hovli', 'Binosiz katta maydon, konteynerlar', 'Uylar, tomlar, pichan, hayvonlar'];
 export const ANIMAL_SPAWNS = [];   // [{t: 0|1, x, z}]
 export const MAP_COUNT = MAP_NAMES.length;
 
@@ -37,7 +37,7 @@ function row(len, pe, win, gap, n) {
   return a;
 }
 
-function buildBuilding(rot) {
+function buildBuilding(rot, NF) {
   const L = [], D = [];
   const T = 0.4;
 
@@ -75,7 +75,7 @@ function buildBuilding(rot) {
   const rowX = row(24, 0.6, 1.8, 1.2, 8);   // old / orqa devor
   const rowZ = row(10, 1.1, 1.8, 1.2, 3);   // yon devorlar
 
-  for (let f = 0; f < 3; f++) {
+  for (let f = 0; f < NF; f++) {
     const fy = f * FH;
     const g = f === 0;
     wall('x', -12.4, -12.0, -12, rowX, fy, g ? new Set([3, 4]) : null, +1);   // old (hovli tomon)
@@ -84,37 +84,40 @@ function buildBuilding(rot) {
     wall('z', 11.6, 12.0, -22, rowZ, fy, g ? new Set([1]) : null, +1);        // sharqiy yon
   }
 
-  // Polli (1-qavat, y=4): zina teshigi x = -8.6 .. -2.6 (g'arbda, orqa devor yonida)
-  mk(L, -12, FH - SLAB, -19.6, 12, FH, -12, 'slab');
-  mk(L, -12, FH - SLAB, -22, -8.6, FH, -19.6, 'slab');
-  mk(L, -2.6, FH - SLAB, -22, 12, FH, -19.6, 'slab');
-  // 2-qavat (y=8): zina teshigi x = 2.6 .. 8.6 (sharqda)
-  mk(L, -12, 2 * FH - SLAB, -19.6, 12, 2 * FH, -12, 'slab');
-  mk(L, -12, 2 * FH - SLAB, -22, 2.6, 2 * FH, -19.6, 'slab');
-  mk(L, 8.6, 2 * FH - SLAB, -22, 12, 2 * FH, -19.6, 'slab');
-  // tom
-  mk(L, -12, 3 * FH - SLAB, -22, 12, 3 * FH, -12, 'slab');
-
-  // Zinalar: 16 pog'ona, har biri 0.25 balandlik, 0.375 uzunlik (jami 6 m).
-  // 1-zina: yerdan 1-qavatga, x=-8.6 dan -2.6 gacha ko'tariladi (oldida 3 m maydoncha bor)
-  for (let i = 0; i < 16; i++) {
-    const x0 = -8.6 + i * 0.375;
-    mk(L, x0, 0, -21.6, x0 + 0.375, 0.25 * (i + 1), -19.6, 'stair');
+  // Pollar: k-qavat (y = k*FH). Zina teshigi: (k-1) juft bo'lsa g'arbda (x -8.6..-2.6), toq bo'lsa sharqda (2.6..8.6).
+  // k = NF — tom (unga ham zina chiqadi).
+  for (let k = 1; k <= NF; k++) {
+    const y = k * FH;
+    mk(L, -12, y - SLAB, -19.6, 12, y, -12, 'slab');
+    if ((k - 1) % 2 === 0) { mk(L, -12, y - SLAB, -22, -8.6, y, -19.6, 'slab'); mk(L, -2.6, y - SLAB, -22, 12, y, -19.6, 'slab'); }
+    else { mk(L, -12, y - SLAB, -22, 2.6, y, -19.6, 'slab'); mk(L, 8.6, y - SLAB, -22, 12, y, -19.6, 'slab'); }
   }
-  // 2-zina: 1-qavatdan 2-qavatga, x=8.6 dan 2.6 gacha ko'tariladi
-  for (let i = 0; i < 16; i++) {
-    const x1 = 8.6 - i * 0.375;
-    mk(L, x1 - 0.375, FH, -21.6, x1, FH + 0.25 * (i + 1), -19.6, 'stair');
+  // Zinalar: har qavatda 16 pog'ona (0.25 x 0.375 m). Juft qavat — g'arbda (+x ga ko'tariladi), toq — sharqda (-x ga).
+  for (let f = 0; f < NF; f++) {
+    const fy = f * FH;
+    for (let i = 0; i < 16; i++) {
+      if (f % 2 === 0) { const x0 = -8.6 + i * 0.375; mk(L, x0, fy, -21.6, x0 + 0.375, fy + 0.25 * (i + 1), -19.6, 'stair'); }
+      else { const x1 = 8.6 - i * 0.375; mk(L, x1 - 0.375, fy, -21.6, x1, fy + 0.25 * (i + 1), -19.6, 'stair'); }
+    }
+    // lift eshigi (orqa devor o'rtasida) — har qavatda
+    mk(D, -0.75, fy, -21.62, 0.75, fy + 2.4, -21.5, 'liftdoor');
+    mk(D, -0.9, fy + 2.4, -21.64, 0.9, fy + 2.75, -21.5, 'liftframe');
   }
 
-  // Tom bezaklari: parapet, suv baki, antenna
-  const top = 3 * FH;
-  mk(D, -12.15, top, -22.15, 12.15, top + 0.55, -21.85, 'trim');
-  mk(D, -12.15, top, -12.15, 12.15, top + 0.55, -11.85, 'trim');
-  mk(D, -12.15, top, -22.15, -11.85, top + 0.55, -11.85, 'trim');
-  mk(D, 11.85, top, -22.15, 12.15, top + 0.55, -11.85, 'trim');
-  mk(D, 3, top, -20, 5.2, top + 1.6, -17.8, 'tank');
+  // Tom: parapet (to'qnashadi, yiqilib ketmaslik uchun), suv baki, antenna
+  const top = NF * FH;
+  mk(L, -12.15, top, -22.15, 12.15, top + 1.0, -21.85, 'parapet');
+  mk(L, -12.15, top, -12.15, 12.15, top + 1.0, -11.85, 'parapet');
+  mk(L, -12.15, top, -21.85, -11.85, top + 1.0, -12.15, 'parapet');
+  mk(L, 11.85, top, -21.85, 12.15, top + 1.0, -12.15, 'parapet');
+  mk(L, -6, top, -16.4, -3.8, top + 1.6, -14.2, 'tankc');
   mk(D, -8, top, -16, -7.6, top + 3.2, -15.6, 'trim');
+  // qavatlararo karniz chiziqlari (ko'rinish)
+  for (let k = 1; k < NF; k++) {
+    const y = k * FH;
+    mk(D, -12.5, y - 0.12, -12.1, 12.5, y + 0.02, -11.9, 'band');
+    mk(D, -12.5, y - 0.12, -22.1, 12.5, y + 0.02, -21.9, 'band');
+  }
 
   // 180 gradusga burish (ikkinchi bino uchun)
   const tf = (b) => rot
@@ -132,21 +135,33 @@ function perimeter(ax, az) {
 }
 function setSpawns(xz) { for (const [x, z] of xz) SPAWNS.push({ x, y: 0, z, yaw: Math.atan2(x, z) }); }
 
+export const HOVLI_FLOORS = 20;
+export const LIFTS = [];   // [{ x, z, floors, dir }] — lift eshigi oldidagi nuqta (har qavatda bir xil x,z)
 function buildHovli() {
   ARENA.x = 31.4; ARENA.z = 27.4;
-  buildBuilding(false);   // shimoliy bino (z = -22..-12)
-  buildBuilding(true);    // janubiy bino (z = 12..22), 180 gradus burilgan
+  const NF = HOVLI_FLOORS;
+  buildBuilding(false, NF);   // shimoliy bino (z = -22..-12)
+  buildBuilding(true, NF);    // janubiy bino (z = 12..22), 180 gradus burilgan
+  LIFTS.push({ x: 0, z: -20.6, floors: NF, nz: 1 }, { x: 0, z: 20.6, floors: NF, nz: -1 });
 
   // Hovli o'rtasida 4 ta yashik (yashirinish uchun)
   CRATES.push([-4.5, -3.2], [4.5, -3.2], [-4.5, 3.2], [4.5, 3.2]);
   for (const [cx, cz] of CRATES) mk(BOXES, cx - 0.9, 0, cz - 0.9, cx + 0.9, 1.8, cz + 0.9, 'crate');
   perimeter(31.4, 27.4);
 
-  // Tug'ilish nuqtalari (markazga qaragan)
-  setSpawns([[-24, -4], [24, 4], [0, -8.5], [0, 8.5], [-9, 0], [9, 0], [-26, 12], [26, -12], [0, -17], [0, 17]]);
-  // Dori qutilari (+50 HP)
-  PICKUPS.push({ x: -26, y: 0, z: 0 }, { x: 26, y: 0, z: 0 }, { x: 0, y: 4, z: -17 }, { x: 0, y: 4, z: 17 },
-    { x: 0, y: 8, z: -17 }, { x: 0, y: 8, z: 17 });
+  // Tug'ilish nuqtalari: hovlida 10 ta + har ikki binoning har qavatida 2 tadan (va tomda)
+  setSpawns([[-24, -4], [24, 4], [0, -8.5], [0, 8.5], [-9, 0], [9, 0], [-26, 12], [26, -12], [-26, -16], [26, 16]]);
+  for (let f = 0; f <= NF; f++) {
+    const y = f * FH;
+    const pts = f === NF ? [[-8, -14], [8, -17]] : [[f % 2 ? -8 : 8, -15.5], [f % 2 ? 6 : -6, -13.2]];
+    for (const [x, z] of pts) {
+      SPAWNS.push({ x, y, z, yaw: Math.PI, b: 1 });            // shimoliy bino: hovliga (+z) qaraydi
+      SPAWNS.push({ x: -x, y, z: -z, yaw: 0, b: 1 });           // janubiy bino: hovliga (-z) qaraydi
+    }
+  }
+  // Dori qutilari (+HP): hovlida va har 3-qavatda
+  PICKUPS.push({ x: -26, y: 0, z: 0 }, { x: 26, y: 0, z: 0 });
+  for (let f = 1; f < NF; f += 3) PICKUPS.push({ x: 0, y: f * FH, z: -15 }, { x: 0, y: f * FH, z: 15 });
   ANIMAL_SPAWNS.push({ t: 0, x: -20, z: 0 }, { t: 0, x: 20, z: 0 }, { t: 1, x: 0, z: -7 }, { t: 1, x: 0, z: 7 });
 }
 
@@ -275,12 +290,67 @@ function buildQishloq() {
   ANIMAL_SPAWNS.push({ t: 0, x: -8, z: 3 }, { t: 0, x: 9, z: -4 }, { t: 1, x: 2, z: -6 }, { t: 1, x: -5, z: 9 });
 }
 
+
+// ---- Fazoviy panjara (tezlik uchun): xz tekisligida 4 m katakchalar ----
+const GCELL = 4, GHALF = 48, GCNT = (2 * GHALF) / GCELL;   // -48..48 m, 24 x 24 katak
+const GRID = Array.from({ length: GCNT * GCNT }, () => []);
+let stampArr = new Uint32Array(0), stamp = 1;
+const cellOf = (v) => Math.max(0, Math.min(GCNT - 1, Math.floor((v + GHALF) / GCELL)));
+export function buildGrid() {
+  for (const c of GRID) c.length = 0;
+  if (stampArr.length < BOXES.length) stampArr = new Uint32Array(BOXES.length + 64);
+  BOXES.forEach((b, i) => {
+    b.i = i;
+    const x0 = cellOf(b.minx), x1 = cellOf(b.maxx), z0 = cellOf(b.minz), z1 = cellOf(b.maxz);
+    for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) GRID[cx * GCNT + cz].push(b);
+  });
+}
+const _near = [];
+// (x0..x1, z0..z1) to'rtburchagiga tegishi mumkin bo'lgan qutilar (takrorlanmaydi). Natija massivi qayta ishlatiladi!
+export function boxesNear(x0, z0, x1, z1) {
+  _near.length = 0;
+  if (++stamp > 0xfffffff0) { stampArr.fill(0); stamp = 1; }
+  const a0 = cellOf(x0), a1 = cellOf(x1), b0 = cellOf(z0), b1 = cellOf(z1);
+  for (let cx = a0; cx <= a1; cx++) for (let cz = b0; cz <= b1; cz++) {
+    const c = GRID[cx * GCNT + cz];
+    for (let k = 0; k < c.length; k++) { const b = c[k]; if (stampArr[b.i] !== stamp) { stampArr[b.i] = stamp; _near.push(b); } }
+  }
+  return _near;
+}
+// Nur bo'ylab kataklarni aylanib chiqish (Amanatides-Woo, xz tekisligida). fn(box) har bir quti uchun bir marta;
+// fn eng yaqin masofani qaytaradi — undan uzoqdagi kataklar tekshirilmaydi.
+function walkRay(ox, oz, dx, dz, maxT, fn) {
+  if (++stamp > 0xfffffff0) { stampArr.fill(0); stamp = 1; }
+  let best = maxT;
+  let cx = Math.floor((ox + GHALF) / GCELL), cz = Math.floor((oz + GHALF) / GCELL);
+  const sx = dx > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
+  const tdx = Math.abs(dx) < 1e-9 ? Infinity : GCELL / Math.abs(dx), tdz = Math.abs(dz) < 1e-9 ? Infinity : GCELL / Math.abs(dz);
+  let tmx = Math.abs(dx) < 1e-9 ? Infinity : ((dx > 0 ? (cx + 1) * GCELL - GHALF : cx * GCELL - GHALF) - ox) / dx;
+  let tmz = Math.abs(dz) < 1e-9 ? Infinity : ((dz > 0 ? (cz + 1) * GCELL - GHALF : cz * GCELL - GHALF) - oz) / dz;
+  let tCell = 0;
+  for (let guard = 0; guard < 200; guard++) {
+    if (cx >= 0 && cx < GCNT && cz >= 0 && cz < GCNT) {
+      const c = GRID[cx * GCNT + cz];
+      for (let k = 0; k < c.length; k++) {
+        const b = c[k];
+        if (stampArr[b.i] === stamp) continue;
+        stampArr[b.i] = stamp;
+        best = fn(b, best);
+      }
+    } else if ((cx < 0 && sx < 0) || (cx >= GCNT && sx > 0) || (cz < 0 && sz < 0) || (cz >= GCNT && sz > 0)) break;
+    if (tmx < tmz) { tCell = tmx; tmx += tdx; cx += sx; } else { tCell = tmz; tmz += tdz; cz += sz; }
+    if (tCell > best) break;
+  }
+  return best;
+}
+
 // Xaritani almashtirish: massivlar tozalanib, qayta to'ldiriladi
 export function loadMap(id) {
   id = ((id | 0) % MAP_COUNT + MAP_COUNT) % MAP_COUNT;
-  BOXES.length = 0; DECOR.length = 0; CRATES.length = 0; SPAWNS.length = 0; PICKUPS.length = 0; ANIMAL_SPAWNS.length = 0;
+  BOXES.length = 0; DECOR.length = 0; CRATES.length = 0; SPAWNS.length = 0; PICKUPS.length = 0; ANIMAL_SPAWNS.length = 0; LIFTS.length = 0;
   MAP.id = id;
   if (id === 0) buildHovli(); else if (id === 1) buildMaydon(); else buildQishloq();
+  buildGrid();
   return id;
 }
 loadMap(0);
@@ -312,40 +382,36 @@ export function rayBox(ox, oy, oz, dx, dy, dz, b) {
   return tmin;
 }
 
-// nurning qutiga kirish va chiqish masofalari ([tmin, tmax]) yoki null
+// nurning qutiga kirish va chiqish masofalari ([tmin, tmax]) yoki null (natija massivi qayta ishlatiladi)
+const _rr = [0, 0];
 export function rayBoxRange(ox, oy, oz, dx, dy, dz, b) {
-  let tmin = 0, tmax = Infinity;
-  const o = [ox, oy, oz], d = [dx, dy, dz], lo = [b.minx, b.miny, b.minz], hi = [b.maxx, b.maxy, b.maxz];
-  for (let i = 0; i < 3; i++) {
-    if (Math.abs(d[i]) < 1e-9) { if (o[i] < lo[i] || o[i] > hi[i]) return null; }
-    else {
-      let t1 = (lo[i] - o[i]) / d[i], t2 = (hi[i] - o[i]) / d[i];
-      if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
-      if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2;
-      if (tmin > tmax) return null;
-    }
-  }
-  return [tmin, tmax];
+  let tmin = 0, tmax = Infinity, t1, t2, t;
+  if (Math.abs(dx) < 1e-9) { if (ox < b.minx || ox > b.maxx) return null; }
+  else { t1 = (b.minx - ox) / dx; t2 = (b.maxx - ox) / dx; if (t1 > t2) { t = t1; t1 = t2; t2 = t; } if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; if (tmin > tmax) return null; }
+  if (Math.abs(dy) < 1e-9) { if (oy < b.miny || oy > b.maxy) return null; }
+  else { t1 = (b.miny - oy) / dy; t2 = (b.maxy - oy) / dy; if (t1 > t2) { t = t1; t1 = t2; t2 = t; } if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; if (tmin > tmax) return null; }
+  if (Math.abs(dz) < 1e-9) { if (oz < b.minz || oz > b.maxz) return null; }
+  else { t1 = (b.minz - oz) / dz; t2 = (b.maxz - oz) / dz; if (t1 > t2) { t = t1; t1 = t2; t2 = t; } if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; if (tmin > tmax) return null; }
+  _rr[0] = tmin; _rr[1] = tmax; return _rr;
 }
 
 // Dunyo bilan eng yaqin kesishish: { t, thick } (thick = o'sha devorning nur bo'ylab qalinligi, yer bo'lsa Infinity)
+let _thick = Infinity;
 export function raycastWorldHit(ox, oy, oz, dx, dy, dz, maxT) {
-  let best = maxT, thick = Infinity;
-  for (let i = 0; i < BOXES.length; i++) {
-    const r = rayBoxRange(ox, oy, oz, dx, dy, dz, BOXES[i]);
-    if (r && r[0] < best) { best = r[0]; thick = r[1] - r[0]; }
-  }
+  _thick = Infinity;
+  let best = walkRay(ox, oz, dx, dz, maxT, (b, cur) => {
+    const r = rayBoxRange(ox, oy, oz, dx, dy, dz, b);
+    if (r && r[0] < cur) { _thick = r[1] - r[0]; return r[0]; }
+    return cur;
+  });
+  let thick = _thick;
   if (dy < 0) { const t = -oy / dy; if (t > 0 && t < best) { best = t; thick = Infinity; } }
   return { t: best, thick };
 }
 
 // Dunyo (devor, pol, yer) bilan eng yaqin kesishish masofasi
 export function raycastWorld(ox, oy, oz, dx, dy, dz, maxT) {
-  let best = maxT;
-  for (let i = 0; i < BOXES.length; i++) {
-    const t = rayBox(ox, oy, oz, dx, dy, dz, BOXES[i]);
-    if (t < best) best = t;
-  }
+  let best = walkRay(ox, oz, dx, dz, maxT, (b, cur) => { const t = rayBox(ox, oy, oz, dx, dy, dz, b); return t < cur ? t : cur; });
   if (dy < 0) { const t = -oy / dy; if (t > 0 && t < best) best = t; }
   return best;
 }

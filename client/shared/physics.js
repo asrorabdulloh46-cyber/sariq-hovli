@@ -1,5 +1,5 @@
 // O'yinchi harakati va to'qnashuv (faqat klientda ishlaydi, server pozitsiyani klientdan oladi)
-import { BOXES, ARENA } from './map.js';
+import { ARENA, boxesNear } from './map.js';
 import { R, H, HC } from './consts.js';
 
 const EPS = 1e-4;
@@ -9,8 +9,9 @@ const STEP = 0.55;   // zinadan chiqish balandligi
 
 export function collides(x, y, z, h = H) {
   const x0 = x - R, x1 = x + R, z0 = z - R, z1 = z + R, y1 = y + h;
-  for (let i = 0; i < BOXES.length; i++) {
-    const b = BOXES[i];
+  const BX = boxesNear(x0, z0, x1, z1);
+  for (let i = 0; i < BX.length; i++) {
+    const b = BX[i];
     if (x1 > b.minx + EPS && x0 < b.maxx - EPS && z1 > b.minz + EPS && z0 < b.maxz - EPS &&
         y1 > b.miny + EPS && y < b.maxy - EPS) return true;
   }
@@ -21,8 +22,9 @@ export function collides(x, y, z, h = H) {
 function supportTop(x, y, z, h = H) {
   const x0 = x - R, x1 = x + R, z0 = z - R, z1 = z + R, y1 = y + h;
   let top = y;
-  for (let i = 0; i < BOXES.length; i++) {
-    const b = BOXES[i];
+  const BX = boxesNear(x0, z0, x1, z1);
+  for (let i = 0; i < BX.length; i++) {
+    const b = BX[i];
     if (x1 > b.minx + EPS && x0 < b.maxx - EPS && z1 > b.minz + EPS && z0 < b.maxz - EPS &&
         y1 > b.miny + EPS && y < b.maxy - EPS) {
       if (b.maxy > top) top = b.maxy;
@@ -59,8 +61,9 @@ function stepOnce(s, vx, vz, jump, dt) {
     let land = -Infinity;
     if (ny <= 0) land = 0;
     const x0 = s.x - R, x1 = s.x + R, z0 = s.z - R, z1 = s.z + R;
-    for (let i = 0; i < BOXES.length; i++) {
-      const b = BOXES[i];
+    const BX = boxesNear(x0, z0, x1, z1);
+    for (let i = 0; i < BX.length; i++) {
+      const b = BX[i];
       if (x1 > b.minx + EPS && x0 < b.maxx - EPS && z1 > b.minz + EPS && z0 < b.maxz - EPS) {
         if (b.maxy > ny && b.maxy <= s.y + 0.01 && b.maxy > land) land = b.maxy;
       }
@@ -70,8 +73,9 @@ function stepOnce(s, vx, vz, jump, dt) {
     if (collides(s.x, ny, s.z, s.h || H)) {
       let low = Infinity;
       const x0 = s.x - R, x1 = s.x + R, z0 = s.z - R, z1 = s.z + R;
-      for (let i = 0; i < BOXES.length; i++) {
-        const b = BOXES[i];
+      const BX = boxesNear(x0, z0, x1, z1);
+      for (let i = 0; i < BX.length; i++) {
+        const b = BX[i];
         if (x1 > b.minx + EPS && x0 < b.maxx - EPS && z1 > b.minz + EPS && z0 < b.maxz - EPS &&
             b.miny >= s.y + (s.h || H) - 0.02 && b.miny < low) low = b.miny;
       }
@@ -98,8 +102,9 @@ export function stepPlayer(s, vx, vz, jump, dt, crouch = false) {
 // ---- Granata fizikasi: g = { x, y, z, vx, vy, vz } (metr, m/s). Qutilardan sakraydi ----
 const GR = 0.11;
 function gHit(x, y, z) {
-  for (let i = 0; i < BOXES.length; i++) {
-    const b = BOXES[i];
+  const BX = boxesNear(x - GR, z - GR, x + GR, z + GR);
+  for (let i = 0; i < BX.length; i++) {
+    const b = BX[i];
     if (x + GR > b.minx && x - GR < b.maxx && z + GR > b.minz && z - GR < b.maxz && y + GR > b.miny && y - GR < b.maxy) return true;
   }
   return false;
