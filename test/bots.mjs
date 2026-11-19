@@ -74,15 +74,21 @@ ok(rsA >= 2, 'Asror qayta tug\'ildi');
 for (let i = 0; i < 4; i++) { place(a, 0, -8, 0); place(v, 0, -17, 0); await sleep(60); }
 await sleep(2700);
 for (let i = 0; i < 3; i++) { place(a, 0, -8, 0); place(v, 0, -17, 0); await sleep(60); }
+a.send({ t: 'w', i: 0 }); await sleep(400);      // pistolet: devordan o'tmaydi
 const before = v.events.filter((e) => e.t === 'dmg').length;
-for (let i = 0; i < 6; i++) { place(a, 0, -8, 0); place(v, 0, -17, 0); a.send({ t: 'shoot', yaw: 0, pitch: 0, z: false }); await sleep(130); }
-ok(v.events.filter((e) => e.t === 'dmg').length === before, 'devor orqali (x=0 ustun) zarar bermadi');
+for (let i = 0; i < 6; i++) { place(a, 0, -8, 0); place(v, 0, -17, 0); a.send({ t: 'shoot', yaw: 0, pitch: 0, z: false }); await sleep(300); }
+ok(v.events.filter((e) => e.t === 'dmg').length === before, 'pistolet devor orqali (x=0 ustun) zarar bermadi');
+a.send({ t: 'w', i: 1 }); await sleep(400);      // avtomat ham devordan o'tmaydi (o'q devorni teshmaydi)
+for (let i = 0; i < 4; i++) { place(a, 0, -8, 0); place(v, 0, -17, 0); a.send({ t: 'shoot', yaw: 0, pitch: 0, z: false }); await sleep(130); }
+const pen = v.events.filter((e) => e.t === 'dmg').slice(before);
+ok(pen.length === 0, 'avtomat devor orqali zarar bermadi: ' + JSON.stringify(pen.map((e) => e.d)));
+await sleep(300);
 
 // zaryad tugashi va qayta zaryadlash
-for (let i = 0; i < 40; i++) { a.send({ t: 'shoot', yaw: 0, pitch: 0 }); await sleep(105); }
+for (let i = 0; i < 420; i++) { a.send({ t: 'shoot', yaw: 0, pitch: 0 }); await sleep(100); }
 ok(a.ammo && a.ammo.r === 1 || a.events.some((e) => e.t === 'a' && e.r === 1), 'o\'q tugagach avtomatik qayta zaryadlash boshlandi');
 await sleep(2300);
-ok(a.ammo && a.ammo.a[1] === 30, 'qayta zaryadlandi: ' + JSON.stringify(a.ammo && a.ammo.a));
+ok(a.events.some((e) => e.t === 'a' && e.a[1] === 400 && !e.r), 'qayta zaryadlandi: ' + JSON.stringify(a.ammo && a.ammo.a));
 
 // ping
 a.send({ t: 'p', ts: 123 }); await sleep(100);
