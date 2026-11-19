@@ -47,6 +47,16 @@
   #score { position:absolute; top:calc(6px + var(--safe-t)); right:calc(10px + var(--safe-r)); min-width:150px; background:rgba(0,0,0,.38); border-radius:10px; padding:5px 8px; font-size:12px; line-height:1.5; }
   #score div { display:flex; align-items:center; gap:6px; white-space:nowrap; }
   #score .nm { flex:1; } #score .me { font-weight:800; color:var(--accent); } #score .kd { font-variant-numeric:tabular-nums; opacity:.95; }
+  #score div.bot { font-size:11px; opacity:.8; } #score div.dead { opacity:.35; text-decoration:line-through; } #score .botcnt { font-size:11px; color:#ffd56b; justify-content:center; margin-top:2px; }
+  #floor { font-size:12px; font-weight:800; color:#ffd56b; margin-top:2px; }
+  #bLift { position:absolute; left:50%; top:calc(92px + var(--safe-t)); transform:translateX(-50%); z-index:6; pointer-events:auto; background:rgba(30,120,200,.75); border:2px solid #9fd3ff; border-radius:12px; padding:10px 14px; font-weight:800; font-size:16px; text-align:center; cursor:pointer; text-shadow:0 1px 2px #000; animation:pulse 1.2s infinite; }
+  #bLift small { display:block; font-size:10px; opacity:.85; }
+  body.touch #bLift small { display:none; }
+  @keyframes pulse { 50% { box-shadow:0 0 18px rgba(120,200,255,.9); } }
+  .liftgrid { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-top:8px; }
+  .liftgrid .lf { padding:10px 0; font-size:15px; font-weight:800; border-radius:8px; border:1px solid rgba(255,255,255,.35); background:rgba(255,255,255,.1); color:#fff; cursor:pointer; }
+  .liftgrid .lf.cur { background:rgba(255,213,107,.45); border-color:#ffd56b; }
+  .liftgrid .lf:first-child { grid-column:span 7; background:rgba(60,160,90,.45); }
   .dot { width:9px; height:9px; border-radius:50%; display:inline-block; flex:none; }
   #stats { position:absolute; top:calc(6px + var(--safe-t)); left:calc(10px + var(--safe-l)); font-size:11px; opacity:.75; text-shadow:0 1px 2px #000; }
   #radar { position:absolute; top:calc(24px + var(--safe-t)); left:calc(10px + var(--safe-l)); width:88px; height:88px; border-radius:50%; background:rgba(0,0,0,.32); border:1px solid rgba(255,255,255,.28); }
@@ -193,7 +203,8 @@
   <canvas id="radar" width="176" height="176"></canvas>
   <div id="ahint" class="hide"><span id="ahico">🐂</span><span id="ahtx"></span><span class="arr" id="aharr">➤</span></div>
   <div id="feed"></div>
-  <div id="topc"><div id="timer">5:00</div><div id="goal"></div></div>
+  <div id="topc"><div id="timer">5:00</div><div id="goal"></div><div id="floor"></div></div>
+  <div id="bLift" class="hide">🛗 LIFT<small id="liftk">E</small></div>
   <div id="score"></div>
   <div id="inv" class="hide">🛡 Himoya</div>
   <div id="msg"></div>
@@ -233,7 +244,7 @@
 <div id="menu">
   <div class="card">
     <h1>SARIQ HOVLI</h1>
-    <div class="sub" id="sub">5 kishilik onlayn 3D otishma · har kim o'zi uchun · 3 ta xarita</div>
+    <div class="sub" id="sub">5 kishilik onlayn 3D otishma · 8 ta bot · 20 qavatli binolar · 3 ta xarita</div>
 
     <div id="panelJoin">
       <div style="font-size:14px;color:#e8d5a3">Ismingizni tanlang:</div>
@@ -245,6 +256,7 @@
       <div class="menubtns">
         <button class="ghost" data-go="pMap">🗺 Xarita: <span id="mapLbl">—</span></button>
         <button class="ghost" data-go="pMode">🎮 Rejim: <span id="modeLbl">—</span></button>
+        <button class="ghost" data-go="pBot">🤖 Botlar: <span id="botLbl">—</span></button>
         <button class="ghost" data-go="pSet">⚙ Sozlamalar</button>
       </div>
       <div class="help" id="helpPC">
@@ -260,6 +272,7 @@
       <div class="menubtns">
         <button class="ghost" data-go="pMap">🗺 Xarita</button>
         <button class="ghost" data-go="pMode">🎮 Rejim</button>
+        <button class="ghost" data-go="pBot">🤖 Botlar</button>
         <button class="ghost" data-go="pSet">⚙ Sozlamalar</button>
         <button class="ghost" id="leave">Chiqish</button>
       </div>
@@ -276,6 +289,13 @@
       <h3>O'yin rejimi</h3>
       <div class="cards" id="modeCards"></div>
       <div class="tip">Rejim keyingi raundda hammaga qo'llanadi (yolg'iz bo'lsangiz — darhol).</div>
+      <button class="ghost" data-back>← Orqaga</button>
+    </div>
+
+    <div id="pBot" class="hide">
+      <h3>🤖 Botlar kuchi</h3>
+      <div class="cards" id="botCards"></div>
+      <div class="tip">Har raundda 8 ta bot bo'ladi. O'ldirilgan bot raund oxirigacha qayta tug'ilmaydi. Tanlov keyingi raundda qo'llanadi (yolg'iz bo'lsangiz — darhol).</div>
       <button class="ghost" data-back>← Orqaga</button>
     </div>
 

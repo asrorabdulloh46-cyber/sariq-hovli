@@ -1,9 +1,9 @@
 // SARIQ HOVLI v3 - asosiy klient: tarmoq, boshqaruv, otish, HUD, do'kon, granata, hayvonlar
 import * as THREE from './vendor/three.module.min.js';
-import { NAMES, COLORS, WEAPONS, GRENADES, GREN_MAX, MODES, ANIMALS, EYE, EYE_C, CROUCH_SPEED, LOW_GRAV, MAX_HP, KILL_LIMIT,
+import { NAMES, COLORS, ALL_NAMES, ALL_COLORS, BOT_LEVELS, BOT0, WEAPONS, GRENADES, GREN_MAX, MODES, ANIMALS, EYE, EYE_C, CROUCH_SPEED, LOW_GRAV, MAX_HP, KILL_LIMIT,
   ROUND_SEC, ARMOR_PRICE, HELMET_PRICE, W_SNIPER, PS, AS } from './shared/consts.js';
-import { MAP_NAMES, MAP_DESC, MAP_COUNT, raycastWorld } from './shared/map.js';
-import { stepPlayer } from './shared/physics.js';
+import { MAP_NAMES, MAP_DESC, MAP_COUNT, raycastWorld, LIFTS } from './shared/map.js';
+import { stepPlayer, collides } from './shared/physics.js';
 import { buildWorld, shadowTexture } from './js/world.js';
 import { createPlayerModel, makeGun, makeFpArms, createAnimalModel } from './js/models.js';
 import { createFx } from './js/fx.js';
@@ -38,7 +38,7 @@ const settings = {
 
 // ---------------- Holat ----------------
 const S = { phase: 'menu', name: null, id: -1, wsOK: false, taken: [], lobbyOK: false, killer: -1, ping: 0, fps: 0, auto: qs.get('auto'),
-  mode: 0, want: -1, wmode: 0, mapNow: 0, tot: null, nemesis: -1, lastLobbyMap: -1 };
+  mode: 0, want: -1, wmode: 0, mapNow: 0, tot: null, nemesis: -1, lastLobbyMap: -1, wbl: 0, blNow: 0 };
 const me = {
   x: 0, y: 0, z: 0, vy: 0, onGround: true, yaw: 0, pitch: 0, hp: MAX_HP, alive: true, inv: false,
   w: 1, ammo: WEAPONS.map((w) => w.mag), own: WEAPONS.map((w) => !!w.start), reloading: false, reloadStart: 0, reloadEnd: 0,
@@ -147,7 +147,7 @@ function makeShadow(size) {
 function getOther(id) {
   let o = others.get(id);
   if (!o) {
-    const model = createPlayerModel(id, NAMES[id]);
+    const model = createPlayerModel(id, ALL_NAMES[id]);
     model.root.scale.setScalar(PS); scene.add(model.root);
     const sh = makeShadow(1.3 * PS); scene.add(sh);
     // o'qiga qarshi ko'rinadigan o't olish yorug'i
@@ -323,6 +323,7 @@ function connect() {
 function onCfg(m) {
   const prevW = S.want, prevM = S.wmode;
   S.want = m.want ?? S.want; S.wmode = m.wmode ?? S.wmode;
+  if (m.wbl !== undefined) S.wbl = m.wbl; if (m.bl !== undefined) S.blNow = m.bl;
   if (m.map !== undefined) S.mapNow = m.map;
   if (m.mode !== undefined) S.modeNow = m.mode;
   renderCfg();
@@ -337,7 +338,7 @@ function onMsg(m) {
     case 'lobby':
       S.taken = m.taken || []; S.lobbyOK = true; S.tot = m.tot || S.tot;
       buildNames(); updatePlayBtn(); setStatus(`Ulandi ✓  (o'yinda: ${S.taken.length}/5)`);
-      onCfg({ map: m.map, want: m.want, mode: m.mode, wmode: m.wmode });
+      onCfg({ map: m.map, want: m.want, mode: m.mode, wmode: m.wmode, bl: m.bl, wbl: m.wbl });
       if (S.auto && S.phase === 'menu') { const i = NAMES.indexOf(S.auto); if (i >= 0 && !S.taken.includes(i)) { S.name = NAMES[i]; join(); } }
       break;
     case 'cfg': onCfg(m); break;
@@ -366,7 +367,7 @@ function onMsg(m) {
     case 'st':
       me.money = m.money; me.armor = m.armor; me.helmet = m.helmet; me.gren = m.gren.slice(); me.own = m.own.map(Boolean); me.shopOpen = !!m.shop;
       renderSlots(); renderGrens(); lastHud.mo = null;
-      if (S.phase === 'shop') { if (!me.shopOpen) closeShop(); else buildShop(); }
+      if (S.phase === 'shop' && !S.liftOpen) { if (!me.shopOpen) closeShop(); else buildShop(); }
       break;
     case 'money':
       if (m.d > 0) { pop(`+$${m.d}`); if (m.why !== 'win') A.sCash(); }
@@ -466,7 +467,7 @@ function startFlash(dur) {
   A.duck(dur); A.sRing(dur);
 }
 
-function nameSpan(id) { return `<span style="color:${COLORS[id]};font-weight:800">${NAMES[id]}</span>`; }
+function nameSpan(id) { return `<span style="color:${ALL_COLORS[id]};font-weight:800">${id >= BOT0 ? '🤖 ' : ''}${ALL_NAMES[id]}</span>`; }
 function addFeed(html) {
   const row = document.createElement('div'); row.innerHTML = html;
   const feed = $('feed'); feed.appendChild(row);
@@ -481,17 +482,14 @@ function onKill(m) {
   else if (m.k >= 0) who = `${nameSpan(m.k)} <span style="opacity:.8">[${wname}${m.h ? ' 🎯' : ''}]</span> ➜ ${nameSpan(m.v)}`;
   else if (m.an >= 0) who = `${m.an === 0 ? '🐂' : '🐖'} ${ANIMALS[m.an].name} ➜ ${nameSpan(m.v)}`;
   else who = `${nameSpan(m.v)} yiqildi`;
-  addFeed(who + (m.rv ? ' <span style="color:#ff8a80">☠ qasos</span>' : ''));
-  if (m.k >= 0 && !m.me && m.ks >= 3 && m.k !== S.id) addFeed(`<span style="color:#ffd54f">🔥 ${NAMES[m.k]}: ${m.ks} ta ketma-ket!</span>`);
+  addFeed(who);
+  if (m.k >= 0 && !m.me && m.ks >= 3 && m.k !== S.id) addFeed(`<span style="color:#ffd54f">🔥 ${ALL_NAMES[m.k]}: ${m.ks} ta ketma-ket!</span>`);
   if (m.v === S.id) {
     S.killer = m.k >= 0 && !m.me ? m.k : -1; S.killedBy = m.an >= 0 ? m.an : -1; S.selfKill = !!m.me;
-    if (m.k >= 0 && !m.me) S.nemesis = m.k;
     die(S.killer); setDeadBy();
   }
   if (m.k === S.id && !m.me) {
-    if (m.v === S.nemesis) S.nemesis = -1;
-    if (m.rv) bigMsg('☠ QASOS!', '#ff8a80');
-    else if (m.ks >= 2) { bigMsg(STREAK_TXT[Math.min(5, m.ks)] + (m.ks > 5 ? ' x' + m.ks : ''), '#ffd54f'); A.sStreak(m.ks); }
+    if (m.ks >= 2) { bigMsg(STREAK_TXT[Math.min(5, m.ks)] + (m.ks > 5 ? ' x' + m.ks : ''), '#ffd54f'); A.sStreak(m.ks); }
   }
 }
 function onAnimalKill(m) {
@@ -558,7 +556,7 @@ function renderCfg() {
       const d = document.createElement('div');
       d.className = 'opt' + (S.want === it.id ? ' sel' : '') + (it.id >= 0 && it.id === S.mapNow ? ' now' : '');
       d.innerHTML = `<div class="pv" style="background:${it.bg}"></div><div class="t">${it.t}</div><div class="d">${it.d}</div>`;
-      d.onclick = () => { S.want = it.id; if (it.id >= 0 && S.phase === 'menu') { S.lastLobbyMap = it.id; changeMap(it.id); } send({ t: 'cfg', map: it.id, mode: S.wmode }); renderCfg(); };
+      d.onclick = () => { S.want = it.id; if (it.id >= 0 && S.phase === 'menu') { S.lastLobbyMap = it.id; changeMap(it.id); } send({ t: 'cfg', map: it.id, mode: S.wmode, bl: S.wbl }); renderCfg(); };
       mc.appendChild(d);
     }
   }
@@ -569,22 +567,34 @@ function renderCfg() {
       const d = document.createElement('div');
       d.className = 'opt' + (S.wmode === i ? ' sel' : '') + (S.modeNow === i ? ' now' : '');
       d.innerHTML = `<div class="t">${md.name}</div><div class="d">${md.desc}</div>`;
-      d.onclick = () => { S.wmode = i; send({ t: 'cfg', map: S.want, mode: i }); renderCfg(); };
+      d.onclick = () => { S.wmode = i; send({ t: 'cfg', map: S.want, mode: i, bl: S.wbl }); renderCfg(); };
       mo.appendChild(d);
     });
   }
+  const bo = $('botCards');
+  if (bo) {
+    bo.innerHTML = '';
+    BOT_LEVELS.forEach((lv, i) => {
+      const d = document.createElement('div');
+      d.className = 'opt' + (S.wbl === i ? ' sel' : '') + (S.blNow === i ? ' now' : '');
+      d.innerHTML = `<div class="t">${'★'.repeat(i + 1)}${'☆'.repeat(BOT_LEVELS.length - 1 - i)} ${lv.name}</div><div class="d">${lv.desc} · joni ${lv.hp}</div>`;
+      d.onclick = () => { S.wbl = i; store.set('bl', i); send({ t: 'cfg', map: S.want, mode: S.wmode, bl: i }); renderCfg(); };
+      bo.appendChild(d);
+    });
+  }
+  if ($('botLbl')) $('botLbl').textContent = BOT_LEVELS[S.wbl ?? 0].name;
   $('mapLbl').textContent = S.want < 0 ? 'Avto' : MAP_NAMES[S.want];
   $('modeLbl').textContent = MODES[S.wmode].name;
 }
 let menuHome = 'panelJoin';
 function showPanel(id) {
-  for (const p of ['panelJoin', 'panelPause', 'pMap', 'pMode', 'pSet']) $(p).classList.toggle('hide', p !== id);
+  for (const p of ['panelJoin', 'panelPause', 'pMap', 'pMode', 'pBot', 'pSet']) $(p).classList.toggle('hide', p !== id);
   $('sub').classList.toggle('hide', id !== 'panelJoin' && id !== 'panelPause');
   if (id === 'pSet') {
     $('sens').value = settings.sens; $('adsens').value = settings.adsens; $('vol').value = settings.vol; $('qual').value = settings.quality;
     $('assist').checked = settings.assist; $('fpsck').checked = settings.stats; $('radarck').checked = settings.radar;
   }
-  if (id === 'pMap' || id === 'pMode') renderCfg();
+  if (id === 'pMap' || id === 'pMode' || id === 'pBot') renderCfg();
 }
 document.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => showPanel(b.dataset.go); });
 document.querySelectorAll('[data-back]').forEach((b) => { b.onclick = () => showPanel(menuHome); });
@@ -599,7 +609,7 @@ function join() {
 function enterPlay() {
   S.phase = 'play'; menuHome = 'panelPause';
   $('menu').classList.add('hide'); $('hud').classList.remove('hide');
-  $('myname').textContent = S.name; $('myname').style.color = COLORS[S.id];
+  $('myname').textContent = S.name; $('myname').style.color = ALL_COLORS[S.id];
   setVmWeapon(me.w); renderSlots(); renderGrens(); onResize(); lastHud = {};
   if (!isTouch) lockPointer();
   setTimeout(() => { if (S.phase === 'play' && me.shopOpen) toast(isTouch ? '🛒 tugmasi — do\'kon' : 'B — do\'kon'); }, 1200);
@@ -669,7 +679,34 @@ function openShop() {
   buildShop(); $('shop').classList.remove('hide');
   try { if (document.pointerLockElement) document.exitPointerLock(); } catch { /* ignore */ }
 }
-function closeShopUi() { $('shop').classList.add('hide'); }
+// ---------------- Lift (20 qavatli binolar) ----------------
+const floorName = (f, n) => (f >= n ? 'Tom' : `${f + 1}-qavat`);
+function nearLift() {
+  if (world.mapId !== 0 || !me.alive) return null;
+  for (const L of LIFTS) if (Math.abs(me.x - L.x) < 1.7 && Math.abs(me.z - L.z) < 1.4) return L;
+  return null;
+}
+function openLift() {
+  const L = nearLift();
+  if (!L || S.phase !== 'play') return;
+  S.phase = 'shop'; S.liftOpen = true; keys = {}; fireHeld = false; joy.x = joy.y = 0;
+  const cur = Math.round(me.y / 4);
+  const btns = [];
+  for (let f = L.floors; f >= 0; f--) btns.push(`<button class="lf${f === cur ? ' cur' : ''}" data-f="${f}">${f >= L.floors ? '🏁 Tom' : f + 1}</button>`);
+  $('shopbox').innerHTML = `<div class="shophead"><h2>🛗 Lift</h2><div id="shopmoney">Hozir: ${floorName(cur, L.floors)}</div><button class="ghost" id="shopclose">✕</button></div>
+    <div class="liftgrid">${btns.join('')}</div>`;
+  $('shopbox').querySelectorAll('.lf').forEach((b) => {
+    b.onclick = () => {
+      const f = +b.dataset.f, y = f * 4 + 0.01;
+      if (!collides(L.x, y, L.z)) { me.x = L.x; me.z = L.z; me.y = y; me.vy = 0; me.onGround = true; me.kbx = me.kbz = 0; A.sBuy(); toast('🛗 ' + floorName(f, L.floors)); }
+      closeShop();
+    };
+  });
+  $('shopclose').onclick = closeShop;
+  $('shop').classList.remove('hide');
+  try { if (document.pointerLockElement) document.exitPointerLock(); } catch { /* ignore */ }
+}
+function closeShopUi() { $('shop').classList.add('hide'); S.liftOpen = false; }
 function closeShop() {
   if (S.phase !== 'shop') return;
   S.phase = 'play'; closeShopUi();
@@ -698,10 +735,14 @@ function renderGrens() {
     box.appendChild(d);
   });
 }
+let lastScoreHtml = '';
 function updateScore() {
   const rows = snapPlayers.slice().sort((a, b) => b[10] - a[10] || a[11] - b[11]);
-  $('score').innerHTML = rows.map((p) =>
-    `<div><span class="dot" style="background:${COLORS[p[0]]}"></span><span class="nm ${p[0] === S.id ? 'me' : ''}">${NAMES[p[0]]}</span><span class="kd">${p[10]} / ${p[11]}</span></div>`).join('');
+  const html = rows.filter((p) => p[0] < BOT0 || p[10] > 0).map((p) =>
+    `<div class="${p[0] >= BOT0 ? 'bot' : ''}${p[7] ? '' : ' dead'}"><span class="dot" style="background:${ALL_COLORS[p[0]]}"></span><span class="nm ${p[0] === S.id ? 'me' : ''}">${p[0] >= BOT0 ? '🤖' + ALL_NAMES[p[0]].slice(4) : ALL_NAMES[p[0]]}</span><span class="kd">${p[10]} / ${p[11]}</span></div>`).join('');
+  const alive = rows.filter((p) => p[0] >= BOT0 && p[7]).length;
+  const tail = `<div class="botcnt">🤖 Tirik botlar: ${alive}/${rows.filter((p) => p[0] >= BOT0).length}</div>`;
+  if (html + tail !== lastScoreHtml) { $('score').innerHTML = html + tail; lastScoreHtml = html + tail; }
 }
 let lastHud = {};
 let crossGap = 8;
@@ -712,7 +753,7 @@ function updateHud(t, dt) {
   if (!lastHud.goal) { $('goal').textContent = `${MODES[S.mode].name} · ${MAP_NAMES[world.mapId]} · ${KILL_LIMIT} ta o'ldirgan yutadi`; lastHud.goal = 1; }
   const hp = Math.max(0, Math.round(me.hp));
   if (lastHud.hp !== hp) {
-    $('hpnum').textContent = hp; const f = $('hpfill'); f.style.width = hp + '%'; f.classList.toggle('low', hp <= 30); lastHud.hp = hp;
+    $('hpnum').textContent = hp; const f = $('hpfill'); f.style.width = (100 * hp / MAX_HP) + '%'; f.classList.toggle('low', hp <= MAX_HP * 0.3); lastHud.hp = hp;
   }
   if (lastHud.ar !== me.armor) { $('arfill').style.width = me.armor + '%'; lastHud.ar = me.armor; }
   const mo = `${me.money}|${me.helmet}|${me.shopOpen}`;
@@ -757,12 +798,20 @@ function updateHud(t, dt) {
   }
   if (settings.stats && t - (lastHud.st || 0) > 500) { $('stats').textContent = `${S.fps} FPS · ${S.ping} ms`; lastHud.st = t; }
   updateRevenge();
+  if (t - (lastHud.lf || 0) > 150) {
+    lastHud.lf = t;
+    const L = S.phase === 'play' ? nearLift() : null;
+    $('bLift').classList.toggle('hide', !L);
+    const fl = world.mapId === 0 && me.alive && me.y > 2 ? '🏢 ' + floorName(Math.round(me.y / 4), LIFTS[0]?.floors ?? 20) : '';
+    if (lastHud.fl !== fl) { $('floor').textContent = fl; lastHud.fl = fl; }
+  }
   if (settings.radar && t - (lastHud.rd || 0) > 60) { drawRadar(t); lastHud.rd = t; }
   if (t - (lastHud.ah || 0) > 150) { lastHud.ah = t; updateAnimalHint(); }
 }
 const _v3 = new THREE.Vector3();
 function updateRevenge() {
-  const el = $('rvmark');
+  const el = $('rvmark'); el.classList.add('hide'); return;   // "qasos" belgisi olib tashlandi
+  // eslint-disable-next-line no-unreachable
   const o = S.nemesis >= 0 && me.alive ? others.get(S.nemesis) : null;
   if (!o || !o.alive || roundPhase !== 'play') { el.classList.add('hide'); return; }
   _v3.set(o.model.root.position.x, o.model.root.position.y + (o.cr ? 1.7 : 2.25) * PS, o.model.root.position.z).project(camera);
@@ -805,12 +854,20 @@ function drawRadar(t) {
   };
   for (const o of others.values()) {
     if (!o.alive) continue;
-    const age = (t - o.lastShot) / 1000, nem = o.id === S.nemesis;
+    const age = (t - o.lastShot) / 1000, nem = false;
+    if (o.id >= BOT0) {   // botlar radarda doim ko'rinadi (kichik kvadrat; boshqa qavatda bo'lsa ▲/▼)
+      const [x, y] = rel(o.model.root.position.x, o.model.root.position.z);
+      const dy = o.model.root.position.y - me.y;
+      g.globalAlpha = age < 2.5 ? 1 : 0.75; g.fillStyle = '#ff5252'; g.strokeStyle = '#000'; g.lineWidth = 1.5;
+      if (Math.abs(dy) < 2) { g.fillRect(x - 4, y - 4, 8, 8); g.strokeRect(x - 4, y - 4, 8, 8); }
+      else { const u = dy > 0 ? -1 : 1; g.beginPath(); g.moveTo(x, y + 6 * u); g.lineTo(x + 6, y - 5 * u); g.lineTo(x - 6, y - 5 * u); g.closePath(); g.fill(); g.stroke(); }
+      continue;
+    }
     if (age > 2.5 && !nem) continue;
     const [x, y, edge] = rel(o.model.root.position.x, o.model.root.position.z);
     const a = nem && age > 2.5 ? 0.55 : 1 - age / 2.5;
     g.globalAlpha = clamp(a, 0.2, 1);
-    g.fillStyle = COLORS[o.id]; g.beginPath(); g.arc(x, y, edge ? 5 : 7, 0, 6.3); g.fill();
+    g.fillStyle = ALL_COLORS[o.id]; g.beginPath(); g.arc(x, y, edge ? 5 : 7, 0, 6.3); g.fill();
     if (nem) { g.strokeStyle = '#ff5a4a'; g.lineWidth = 3; g.stroke(); }
   }
   g.globalAlpha = 1;
@@ -831,14 +888,14 @@ function drawRadar(t) {
 function showEnd() {
   closeShopUi();
   const rows = snapPlayers.slice().sort((a, b) => b[10] - a[10] || a[11] - b[11]);
-  const w = winners.length ? winners.map((i) => NAMES[i]).join(' va ') : 'Hech kim';
+  const w = winners.length ? winners.map((i) => ALL_NAMES[i]).join(' va ') : 'Hech kim';
   const tot = S.tot;
   const medals = (S.endMsg && S.endMsg.med) || [];
   $('endscreen').innerHTML = `<h2>🏆 G'olib: ${w}</h2>
     <div class="endwrap" style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center;align-items:flex-start">
       <table><tr><th></th><th>O'LDIRDI</th><th>YIQILDI</th>${tot ? '<th>JAMI G\'ALABA</th>' : ''}</tr>${rows.map((p) =>
-    `<tr class="${winners.includes(p[0]) ? 'w' : ''}"><td style="color:${COLORS[p[0]]};text-align:left">${NAMES[p[0]]}</td><td>${p[10]}</td><td>${p[11]}</td>${tot ? `<td>${tot[p[0]].w}</td>` : ''}</tr>`).join('')}</table>
-      <div class="medals">${medals.map((md, i) => `<div class="medal" style="animation-delay:${0.25 * i}s"><b>🏅 ${md.t}</b><span style="color:${COLORS[md.id]};font-weight:800">${NAMES[md.id]}</span> · ${md.v}</div>`).join('')}</div>
+    `<tr class="${winners.includes(p[0]) ? 'w' : ''}"><td style="color:${ALL_COLORS[p[0]]};text-align:left">${ALL_NAMES[p[0]]}</td><td>${p[10]}</td><td>${p[11]}</td>${tot ? `<td>${tot[p[0]].w}</td>` : ''}</tr>`).join('')}</table>
+      <div class="medals">${medals.map((md, i) => `<div class="medal" style="animation-delay:${0.25 * i}s"><b>🏅 ${md.t}</b><span style="color:${ALL_COLORS[md.id]};font-weight:800">${ALL_NAMES[md.id]}</span> · ${md.v}</div>`).join('')}</div>
     </div><div id="nextr" style="opacity:.85;font-size:13px;margin-top:6px"></div>`;
   $('endscreen').classList.remove('hide');
   if (medals.length) setTimeout(A.sMedal, 300);
@@ -854,7 +911,7 @@ function cycleGrenade() {
   renderGrens();
 }
 document.addEventListener('keydown', (e) => {
-  if (S.phase === 'shop') { if (e.code === 'KeyB' || e.code === 'Escape') { closeShop(); e.preventDefault(); } return; }
+  if (S.phase === 'shop') { if (e.code === 'KeyB' || e.code === 'Escape' || (S.liftOpen && e.code === 'KeyE')) { closeShop(); e.preventDefault(); } return; }
   if (S.phase !== 'play') return;
   if (e.repeat && e.code !== 'Space') { e.preventDefault(); return; }
   keys[e.code] = true;
@@ -864,6 +921,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyG') throwGrenade();
   else if (e.code === 'KeyQ') cycleGrenade();
   else if (e.code === 'KeyB') openShop();
+  else if (e.code === 'KeyE') openLift();
   else if (e.code === 'Tab') e.preventDefault();
 });
 document.addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -897,6 +955,7 @@ function btnDown(id) {
   else if (id === 'bShop') openShop();
   else if (id === 'bMenu') openPause();
 }
+$('bLift').addEventListener('click', () => openLift());
 function btnUp(id) { if (id === 'bFire') { fireHeld = false; fireLatch = false; } }
 const FIRE_DEADZONE = 20;   // OTISH tugmasini bosganda barmoq biroz siljisa nishon surilmaydi
 if (isTouch) {
@@ -910,6 +969,7 @@ if (isTouch) {
       const slot = el && el.closest ? el.closest('.slot') : null;
       const chip = el && el.closest ? el.closest('.chip') : null;
       if (slot) { selectWeapon(+slot.dataset.i); touches.set(t.identifier, { type: 'none' }); continue; }
+      if (el && el.closest && el.closest('#bLift')) { touches.set(t.identifier, { type: 'none' }); openLift(); continue; }
       if (chip) { me.selG = +chip.dataset.g; renderGrens(); touches.set(t.identifier, { type: 'none' }); continue; }
       if (btn) {
         touches.set(t.identifier, { type: 'btn', id: btn.id, sx: t.clientX, sy: t.clientY, lx: t.clientX, ly: t.clientY, moved: false });
@@ -1204,5 +1264,5 @@ connect();
 // menyudagi tanlov: serverdan "band" ismlar ro'yxatini yangilab turamiz
 setInterval(() => { if (S.phase === 'menu' && ws && ws.readyState === 1) send({ t: 'l' }); }, 3000);
 requestAnimationFrame(frame);
-window.__game = { S, me, others, animals, world, fx, send, setFire(v) { fireHeld = v; if (!v) fireLatch = false; }, selectWeapon, setW(i) { me.w = i; me.own[i] = true; setVmWeapon(i); lastHud.w = null; }, doReload, openShop, closeShop, throwGrenade, setAds,
+window.__game = { S, me, others, animals, world, fx, send, openLift, setFire(v) { fireHeld = v; if (!v) fireLatch = false; }, selectWeapon, setW(i) { me.w = i; me.own[i] = true; setVmWeapon(i); lastHud.w = null; }, doReload, openShop, closeShop, throwGrenade, setAds,
   get ws() { return ws; }, scene, camera, renderer, vm, settings };
