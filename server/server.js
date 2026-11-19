@@ -9,11 +9,12 @@ import {
   R, H, EYE, HC, PS, EYE_C, MAX_HP, RESPAWN_MS, SPAWN_INV_MS, ROUND_SEC, END_SEC, KILL_LIMIT, HEAD_MULT,
   PICKUP_HEAL, PICKUP_RESPAWN_MS, START_MONEY, KILL_MONEY, HEAD_BONUS, REVENGE_BONUS, MONEY_CAP,
   ARMOR_PRICE, HELMET_PRICE, WIN_BONUS, ARMOR_ABSORB, HELMET_HEAD, MODES, ANIMALS, W_SNIPER, W_PISTOL, W_RIFLE,
+  ALL_NAMES, BOT0, BOT_COUNT, BOT_LEVELS,
 } from '../client/shared/consts.js';
 import {
   SPAWNS, PICKUPS, ARENA, MAP, MAP_COUNT, loadMap, raycastWorld, raycastWorldHit, rayBox,
 } from '../client/shared/map.js';
-import { stepGrenade } from '../client/shared/physics.js';
+import { stepGrenade, stepPlayer, collides } from '../client/shared/physics.js';
 import { animals, resetAnimals, stepAnimals, damageAnimal, animalBox } from './animals.js';
 import { createPoyga } from './poyga.js';
 import { createTermiz } from './termiz.js';
@@ -51,10 +52,11 @@ const httpServer = http.createServer((req, res) => {
 
 // ---------------- O'yin holati ----------------
 const NW = WEAPONS.length;
-const players = new Array(NAMES.length).fill(null);          // id = NAMES indeksi
+const players = new Array(ALL_NAMES.length).fill(null);      // id = ALL_NAMES indeksi (0..4 odamlar, 5..12 botlar)
 const newStat = () => ({ k: 0, d: 0, hs: 0, dmg: 0, an: 0, gk: 0, smax: 0 });
-const stats = NAMES.map(newStat);
-const tot = NAMES.map(() => ({ w: 0, k: 0, d: 0 }));         // server ishlagan vaqt davomida jami
+const stats = ALL_NAMES.map(newStat);
+const tot = ALL_NAMES.map(() => ({ w: 0, k: 0, d: 0 }));
+let botLevel = parseInt(process.env.BOT_LEVEL || '0', 10), wantBot = botLevel;         // server ishlagan vaqt davomida jami
 let pickups = [];
 let grenades = [];
 let gid = 1;
@@ -85,27 +87,36 @@ function send(p, obj) {
 }
 function broadcast(obj) {
   const s = JSON.stringify(obj);
-  for (const p of players) if (p && p.ws.readyState === 1) { try { p.ws.send(s); } catch { /* ignore */ } }
+  for (const p of players) if (p && p.ws && p.ws.readyState === 1) { try { p.ws.send(s); } catch { /* ignore */ } }
 }
-const joined = () => players.filter(Boolean);
+const joined = () => players.filter((p) => p && !p.bot);   // faqat odamlar
 
-function bestSpawn(selfId) {
-  let best = SPAWNS[0], bestD = -1;
+// Tug'ilish joyi: dushmanlardan uzoq (xavfsiz) nuqtalar orasidan tasodifiy tanlanadi — har safar har xil joy.
+// Odamlar ko'proq binolar ichida (b: 1) tug'iladi.
+function bestSpawn(selfId, used) {
+  const scored = [];
+  const human = selfId < BOT0;
   for (const sp of SPAWNS) {
+    if (used && used.has(sp)) continue;
+    if (!human && sp.y > 24) continue;   // botlar: hovli va 1–7-qavatlar (topish oson bo'lsin)
     let min = 1e9;
     for (const p of players) {
       if (!p || p.id === selfId || !p.alive) continue;
-      const d = Math.hypot(p.x - sp.x, p.y - sp.y, p.z - sp.z) + Math.abs(p.y - sp.y) * 2;
+      const d = Math.hypot(p.x - sp.x, p.z - sp.z) + Math.abs(p.y - sp.y) * 1.5;
       if (d < min) min = d;
     }
-    for (const a of animals) {   // buqa yonida tug'ilmaslik uchun (u 1.8 marta yaqin deb hisoblanadi)
-      if (!a.alive || a.t !== 0) continue;
+    for (const a of animals) {   // buqa yonida tug'ilmaslik uchun
+      if (!a.alive || a.t !== 0 || sp.y > 1) continue;
       min = Math.min(min, Math.hypot(a.x - sp.x, a.z - sp.z) / 1.8);
     }
-    min += Math.random() * 4;   // bir xil joyda tug'ilavermasin
-    if (min > bestD) { bestD = min; best = sp; }
+    scored.push({ sp, min });
   }
-  return best;
+  if (!scored.length) return SPAWNS[Math.floor(Math.random() * SPAWNS.length)];
+  let safe = scored.filter((e) => e.min > 16);
+  if (!safe.length) { scored.sort((a, b) => b.min - a.min); safe = scored.slice(0, Math.max(1, Math.ceil(scored.length / 4))); }
+  const inB = safe.filter((e) => e.sp.b), outB = safe.filter((e) => !e.sp.b);
+  if (human) { if (inB.length && Math.random() < 0.7) safe = inB; } else if (outB.length && Math.random() < 0.4) safe = outB;
+  return safe[Math.floor(Math.random() * safe.length)].sp;
 }
 
 // Lag kompensatsiya: har bir o'yinchining so'nggi ~1.5 soniyalik joylashuv tarixi
@@ -152,15 +163,18 @@ function addMoney(p, n, why) {
   if (p.money !== before) { send(p, { t: 'money', d: p.money - before, why }); sendSt(p); }
 }
 
-function respawn(p, first) {
-  const sp = bestSpawn(p.id);
+function respawn(p, first, used) {
+  const sp = bestSpawn(p.id, used);
+  if (used) used.add(sp);
   p.x = sp.x; p.y = sp.y; p.z = sp.z; p.yaw = sp.yaw; p.pitch = 0;
-  p.hp = MAX_HP; p.alive = true; p.cr = 0; p.rs = (p.rs || 0) + 1;
+  p.maxHp = p.bot ? BOT_LEVELS[botLevel].hp : MAX_HP;
+  p.hp = p.maxHp; p.alive = true; p.cr = 0; p.rs = (p.rs || 0) + 1;
   resetLoadout(p);
   p.invUntil = now() + SPAWN_INV_MS;
   p.hist = []; pushHist(p); p.vh = 0; p.vv = 0; p.lastIn = 0;
   send(p, { t: 'respawn', x: sp.x, y: sp.y, z: sp.z, yaw: sp.yaw, rs: p.rs, first: !!first, m: MAP.id, md: mode });
   sendAmmo(p); sendSt(p);
+  if (p.bot) botReset(p);
 }
 
 function startReload(p) {
@@ -177,7 +191,7 @@ function applyDamage(v, dmg, head, atk, info) {
   const t = now();
   if (!v.alive || t < v.invUntil) return { dealt: 0, kill: false };
   if (head && v.helmet) dmg *= HELMET_HEAD;
-  if (mode === 3 && atk && atk !== v) dmg = 200;
+  if (mode === 3 && atk && atk !== v) dmg = 9999;
   let hpDmg = dmg;
   if (v.armor > 0) {
     const absorbed = Math.min(v.armor, dmg * ARMOR_ABSORB);
@@ -207,10 +221,8 @@ function killPlayer(v, atk, info, head) {
     if (info.gren) s.gk++;
     atk.streak = (atk.streak || 0) + 1; ks = atk.streak;
     if (atk.streak > s.smax) s.smax = atk.streak;
-    if (atk.nemesis === v.id) { rv = 1; atk.nemesis = -1; }
-    addMoney(atk, KILL_MONEY + (head ? HEAD_BONUS : 0) + (rv ? REVENGE_BONUS : 0), 'kill');
-    v.nemesis = atk.id;
-  } else v.nemesis = -1;
+    addMoney(atk, KILL_MONEY + (head ? HEAD_BONUS : 0), 'kill');   // "qasos" olib tashlandi
+  }
   broadcast({ t: 'kill', k: atk && !self ? atk.id : -1, v: v.id, w: info.w ?? -1, h: head ? 1 : 0, g: info.gren ? 1 : 0,
     an: info.an ?? -1, ks, rv, me: self ? 1 : 0 });
   if (atk && !self && stats[atk.id].k >= KILL_LIM && phase === 'play') endRound();
@@ -219,10 +231,122 @@ function killPlayer(v, atk, info, head) {
 function animalKilledBy(p, a, info) {
   const def = ANIMALS[a.t];
   stats[p.id].an++;
-  p.hp = Math.min(MAX_HP, p.hp + def.rewardHp);
+  p.hp = Math.min(p.maxHp || MAX_HP, p.hp + def.rewardHp);
   send(p, { t: 'heal', hp: p.hp, an: a.t });
   addMoney(p, def.rewardMoney, 'an');
   broadcast({ t: 'akill', k: p.id, a: a.t, w: info.w ?? -1, g: info.gren ? 1 : 0, x: r2(a.x), z: r2(a.z) });
+}
+
+// ---------- Botlar (server boshqaradi) ----------
+// 8 ta bot har raund boshida tug'iladi, o'lsa — raund oxirigacha qayta tug'ilmaydi. Faqat odamlarni otadi.
+const BOT_SPEED = 4.4;
+function spawnBots() {
+  const used = new Set();
+  for (let i = 0; i < BOT_COUNT; i++) {
+    const id = BOT0 + i;
+    const b = { id, bot: true, ws: null, name: ALL_NAMES[id], x: 0, y: 0, z: 0, yaw: 0, pitch: 0, hp: 100, alive: true, w: 0,
+      ammo: fullAmmo(), own: startOwn(), reloadEnd: 0, nextFire: 0, invUntil: 0, respawnAt: 0, rs: 0, lastSeen: now(), hist: [], rtt: 0,
+      cr: 0, money: 0, armor: 0, helmet: 0, gren: [0, 0, 0], streak: 0, vh: 0, vv: 0, lastIn: 0, maxHp: 100 };
+    players[id] = b;
+    respawn(b, true, used);
+  }
+}
+function botReset(b) {
+  b.ph = { x: b.x, y: b.y, z: b.z, vy: 0, onGround: true };
+  b.wp = null; b.tgt = -1; b.fireAt = 0; b.botNext = 0; b.thinkAt = now() + Math.random() * 300;
+  b.lastSeenAt = 0; b.lsx = 0; b.lsz = 0; b.strafe = Math.random() < 0.5 ? 1 : -1; b.strafeAt = 0;
+  b.stuckAt = now() + 1500; b.stuckX = b.x; b.stuckZ = b.z;
+  // kuchsiz botlar — pistolet, kuchlilari — avtomat (rejim cheklasa, o'sha qurol)
+  if (mode === 0 || mode === 4 || mode === 3) b.w = botLevel <= 1 ? W_PISTOL : W_RIFLE;
+  if (!b.own[b.w]) b.w = b.own.findIndex(Boolean);
+}
+// Bot qayerda: { bld: 0 (tashqarida) | 1 (shimoliy bino) | -1 (janubiy), fl: qavat }
+function regionOf(x, y, z) {
+  if (MAP.id === 0 && Math.abs(x) < 12 && Math.abs(z) > 12 && Math.abs(z) < 22) return { bld: z < 0 ? 1 : -1, fl: Math.round(y / 4) };
+  return { bld: 0, fl: 0 };
+}
+function pickWaypoint(b) {
+  const r = regionOf(b.x, b.y, b.z);
+  for (let k = 0; k < 10; k++) {
+    let x, z, y;
+    if (r.bld) { x = (Math.random() * 2 - 1) * 10.6; z = -r.bld * (12.8 + Math.random() * 6.4); y = r.fl * 4; }
+    else {
+      x = (Math.random() * 2 - 1) * (ARENA.x - 2); z = (Math.random() * 2 - 1) * (ARENA.z - 2); y = 0;
+      if (regionOf(x, 0, z).bld) continue;
+      if (Math.hypot(x - b.x, z - b.z) > 30) continue;
+    }
+    if (!collides(x, y + 0.05, z)) { b.wp = { x, z }; return; }
+  }
+  b.wp = { x: b.x + (Math.random() - 0.5) * 6, z: b.z + (Math.random() - 0.5) * 6 };
+}
+function botSees(b, v) {
+  const ex = b.x, ey = b.y + EYE, ez = b.z, tx = v.x, ty = v.y + (v.cr ? 0.9 : 1.3) * PS, tz = v.z;
+  const dx = tx - ex, dy = ty - ey, dz = tz - ez, d = Math.hypot(dx, dy, dz);
+  if (d < 0.5) return true;
+  return raycastWorld(ex, ey, ez, dx / d, dy / d, dz / d, d) >= d - 0.3;
+}
+const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
+function stepBots(dt, t) {
+  const lv = BOT_LEVELS[botLevel];
+  for (let i = BOT0; i < players.length; i++) {
+    const b = players[i];
+    if (!b || !b.alive) continue;
+    // ---- o'ylash (har ~0.25 s) ----
+    if (t >= b.thinkAt) {
+      b.thinkAt = t + 220 + Math.random() * 80;
+      let best = null, bd = lv.range;
+      for (const v of players) {
+        if (!v || v.bot || !v.alive) continue;
+        const d = Math.hypot(v.x - b.x, v.y - b.y, v.z - b.z);
+        if (d < bd && botSees(b, v)) { bd = d; best = v; }
+      }
+      if (best) {
+        if (b.tgt !== best.id) { b.tgt = best.id; b.fireAt = t + lv.react * 1000 * (0.8 + Math.random() * 0.5); }
+        b.lastSeenAt = t; b.lsx = best.x; b.lsz = best.z; b.lsy = best.y;
+      } else b.tgt = -1;
+      // tiqilib qoldimi?
+      if (t >= b.stuckAt) {
+        if (Math.hypot(b.x - b.stuckX, b.z - b.stuckZ) < 0.4 && b.tgt < 0) { pickWaypoint(b); b.jump = true; }
+        b.stuckAt = t + 1500; b.stuckX = b.x; b.stuckZ = b.z;
+      }
+    }
+    const tg = b.tgt >= 0 ? players[b.tgt] : null;
+    // ---- harakat ----
+    let mx = 0, mz = 0;
+    const sp = BOT_SPEED * lv.speed;
+    if (tg && tg.alive) {
+      const dx = tg.x - b.x, dz = tg.z - b.z, d = Math.hypot(dx, dz) || 1;
+      if (t >= b.strafeAt) { b.strafe = Math.random() < 0.5 ? 1 : -1; b.strafeAt = t + 900 + Math.random() * 1400; }
+      const fwd = d > lv.range * 0.55 ? 0.8 : d < 7 ? -0.6 : 0;
+      mx = (dx / d) * fwd + (-dz / d) * b.strafe * 0.7; mz = (dz / d) * fwd + (dx / d) * b.strafe * 0.7;
+      b.yaw = Math.atan2(-dx, -dz);
+    } else {
+      if (b.lastSeenAt && t - b.lastSeenAt < 5000 && Math.abs((b.lsy ?? 0) - b.y) < 2) b.wp = { x: b.lsx, z: b.lsz };
+      if (!b.wp) pickWaypoint(b);
+      const dx = b.wp.x - b.x, dz = b.wp.z - b.z, d = Math.hypot(dx, dz);
+      if (d < 0.8) { b.wp = null; if (b.lastSeenAt && t - b.lastSeenAt < 5000) b.lastSeenAt = 0; }
+      else { mx = dx / d; mz = dz / d; b.yaw = Math.atan2(-mx, -mz); }
+    }
+    const ml = Math.hypot(mx, mz);
+    if (ml > 1) { mx /= ml; mz /= ml; }
+    const ph = b.ph;
+    stepPlayer(ph, mx * sp, mz * sp, !!b.jump, dt);
+    b.jump = false;
+    b.vh = Math.hypot(ph.x - b.x, ph.z - b.z) / dt; b.vv = 0;
+    b.x = ph.x; b.y = ph.y; b.z = ph.z;
+    // ---- otish ----
+    if (tg && tg.alive && t >= b.fireAt && t >= b.botNext && t >= b.nextFire) {
+      const ex = b.x, ey = b.y + EYE, ez = b.z;
+      const ty = tg.y + (tg.cr ? 0.75 : 1.15) * PS;
+      const dx = tg.x - ex, dy = ty - ey, dz = tg.z - ez, hd = Math.hypot(dx, dz);
+      const err = lv.err * (1 + Math.hypot(dx, dy, dz) / 40);
+      const yaw = Math.atan2(-dx, -dz) + gauss() * err, pitch = Math.atan2(dy, hd) + gauss() * err * 0.7;
+      b.pitch = pitch;
+      handleShoot(b, { yaw, pitch });
+      b.botNext = t + Math.max(WEAPONS[b.w].interval, lv.rate) * 1000 * (0.8 + Math.random() * 0.6);
+    }
+    pushHist(b);
+  }
 }
 
 // ---------- Otish ----------
@@ -279,7 +403,7 @@ function handleShoot(p, msg) {
       if (bt < tFirst || (penMul < 1 && bt > tExit && bt < tLimit)) { bestT = bt; cand = { ...c, mult: bt < tFirst ? 1 : penMul }; }
     };
     for (const v of players) {
-      if (!v || v.id === p.id || !v.alive) continue;
+      if (!v || v.id === p.id || !v.alive || (p.bot && v.bot)) continue;
       const vp = posAt(v, t - rewind);
       const vh = (vp.cr ? HC : H) * PS, hr = 0.34 * PS;   // model kattaroq: zarba qutisi ham kattaroq
       const bt = rayBox(ox, oy, oz, dx, dy, dz, { minx: vp.x - hr, miny: vp.y, minz: vp.z - hr, maxx: vp.x + hr, maxy: vp.y + vh, maxz: vp.z + hr });
@@ -298,7 +422,7 @@ function handleShoot(p, msg) {
       let e = acc.get(key); if (!e) { e = { v: cand.v, a: cand.a, dmg: 0, head: false }; acc.set(key, e); }
       let head = false;
       if (cand.v) head = ey >= cand.vy + cand.vh * 0.79;
-      e.dmg += wd.dmg * (head ? HEAD_MULT : 1) * cand.mult;
+      e.dmg += wd.dmg * (head ? HEAD_MULT : 1) * cand.mult * (p.bot ? BOT_LEVELS[botLevel].dmg : 1);
       if (head) e.head = true;
     }
   }
@@ -426,13 +550,13 @@ function endRound() {
   phase = 'end';
   endAt = now() + END_S * 1000;
   let max = 0;
-  for (let i = 0; i < NAMES.length; i++) if (players[i] && stats[i].k > max) max = stats[i].k;
-  winners = max > 0 ? NAMES.map((n, i) => (players[i] && stats[i].k === max ? i : -1)).filter((i) => i >= 0) : [];
+  for (let i = 0; i < ALL_NAMES.length; i++) if (players[i] && stats[i].k > max) max = stats[i].k;
+  winners = max > 0 ? ALL_NAMES.map((n, i) => (players[i] && stats[i].k === max ? i : -1)).filter((i) => i >= 0) : [];
   for (const w of winners) { tot[w].w++; if (players[w]) addMoney(players[w], WIN_BONUS, 'win'); }
   medals = [];
   for (const [key, title] of MEDALS) {
     let best = -1, bv = 0;
-    for (let i = 0; i < NAMES.length; i++) if (players[i] && stats[i][key] > bv) { bv = stats[i][key]; best = i; }
+    for (let i = 0; i < ALL_NAMES.length; i++) if (players[i] && stats[i][key] > bv) { bv = stats[i][key]; best = i; }
     if (best >= 0) medals.push({ t: title, id: best, v: Math.round(bv) });
   }
   nextMap = computeNextMap();
@@ -446,16 +570,19 @@ function startRound() {
   nextMap = computeNextMap();
   if (nextMap !== MAP.id) initMap(nextMap); else { for (const pk of pickups) pk.at = 0; spawnAnimals(); grenades = []; }
   for (let i = 0; i < stats.length; i++) stats[i] = newStat();
-  for (const p of players) if (p) { p.money = Math.max(START_MONEY, p.money); p.streak = 0; p.nemesis = -1; respawn(p, false); }
-  broadcast({ t: 'start', m: MAP.id, md: mode });
+  botLevel = wantBot;
+  for (const p of players) if (p && !p.bot) { p.money = Math.max(START_MONEY, p.money); p.streak = 0; respawn(p, false); }
+  spawnBots();
+  broadcast({ t: 'start', m: MAP.id, md: mode, bl: botLevel });
 }
 
-function cfgMsg() { return { t: 'cfg', map: MAP.id, want: wantMap, mode, wmode: wantMode }; }
+function cfgMsg() { return { t: 'cfg', map: MAP.id, want: wantMap, mode, wmode: wantMode, bl: botLevel, wbl: wantBot }; }
 
 function setConfig(msg) {
   if (isNum(msg.map) && msg.map >= -1 && msg.map < MAP_COUNT) wantMap = msg.map | 0;
   if (isNum(msg.mode) && msg.mode >= 0 && msg.mode < MODES.length) wantMode = msg.mode | 0;
-  const changed = (wantMap >= 0 && wantMap !== MAP.id) || wantMode !== mode;
+  if (isNum(msg.bl) && msg.bl >= 0 && msg.bl < BOT_LEVELS.length) wantBot = msg.bl | 0;
+  const changed = (wantMap >= 0 && wantMap !== MAP.id) || wantMode !== mode || wantBot !== botLevel;
   if (joined().length <= 1 && changed) { startRound(); }       // faqat bitta o'yinchi bo'lsa darhol
   else if (phase === 'end') nextMap = computeNextMap();
   broadcastAll(cfgMsg());
@@ -485,7 +612,7 @@ function onMessage(ws, raw) {
       const np = { id, ws, name: NAMES[id], x: 0, y: 0, z: 0, yaw: 0, pitch: 0, hp: MAX_HP, alive: true, w: 1,
         ammo: fullAmmo(), own: startOwn(), reloadEnd: 0, nextFire: 0, invUntil: 0, respawnAt: 0, rs: 0,
         lastSeen: now(), hist: [], rtt: 0, cr: 0, money: START_MONEY, armor: 0, helmet: 0, gren: shopOpen() ? [GREN_MAX, GREN_MAX, GREN_MAX] : [0, 0, 0],
-        streak: 0, nemesis: -1, vh: 0, vv: 0, lastIn: 0 };
+        streak: 0, vh: 0, vv: 0, lastIn: 0, maxHp: MAX_HP };
       ws.player = np; players[id] = np;
       respawn(np, true);
       send(np, { t: 'welcome', id, name: NAMES[id], ph: phase, m: MAP.id, md: mode });
@@ -497,7 +624,7 @@ function onMessage(ws, raw) {
       if (!p || !p.alive || msg.rs !== p.rs) return;
       const t = now();
       if (isNum(msg.x) && isNum(msg.y) && isNum(msg.z)) {
-        const nx = clamp(msg.x, -ARENA.x, ARENA.x), nz = clamp(msg.z, -ARENA.z, ARENA.z), ny = clamp(msg.y, 0, 26);
+        const nx = clamp(msg.x, -ARENA.x, ARENA.x), nz = clamp(msg.z, -ARENA.z, ARENA.z), ny = clamp(msg.y, 0, 100);
         if (p.lastIn && t - p.lastIn > 5 && t - p.lastIn < 500) {
           const dt = (t - p.lastIn) / 1000;
           const sp = Math.min(12, Math.hypot(nx - p.x, nz - p.z) / dt), vv = Math.min(30, Math.abs(ny - p.y) / dt);
@@ -538,10 +665,11 @@ setInterval(() => {
   const t = now();
   if (phase === 'play' && t >= roundEnd) endRound();
   else if (phase === 'end' && t >= endAt) startRound();
+  if (phase === 'play' && joined().length) stepBots(DT, t);
 
   for (const p of players) {
     if (!p) continue;
-    if (!p.alive && phase === 'play' && t >= p.respawnAt) respawn(p, false);
+    if (!p.alive && !p.bot && phase === 'play' && t >= p.respawnAt) respawn(p, false);   // botlar qayta tug'ilmaydi
     if (p.reloadEnd && t >= p.reloadEnd) {
       p.ammo[p.reloadW ?? p.w] = WEAPONS[p.reloadW ?? p.w].mag;
       p.reloadEnd = 0; sendAmmo(p);
@@ -566,9 +694,9 @@ setInterval(() => {
     if (pk.at && t >= pk.at) pk.at = 0;
     if (pk.at) continue;
     for (const p of players) {
-      if (!p || !p.alive || p.hp >= MAX_HP) continue;
+      if (!p || !p.alive || p.hp >= p.maxHp) continue;
       if (Math.hypot(p.x - pos.x, p.z - pos.z) < 1.3 && Math.abs(p.y - pos.y) < 1.5) {
-        p.hp = Math.min(MAX_HP, p.hp + PICKUP_HEAL);
+        p.hp = Math.min(p.maxHp, p.hp + PICKUP_HEAL);
         pk.at = t + PICKUP_RESPAWN_MS;
         send(p, { t: 'heal', hp: p.hp });
         break;
@@ -583,8 +711,9 @@ setInterval(() => {
     pk: pickups.map((pk) => (pk.at ? 0 : 1)),
     p: players.filter(Boolean).map((p) => [
       p.id, r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), r2(p.pitch), Math.max(0, Math.round(p.hp)),
-      p.alive ? 1 : 0, p.w, t < p.invUntil ? 1 : 0, stats[p.id].k, stats[p.id].d, p.cr ? 1 : 0, p.armor > 0 ? 1 : 0,
+      p.alive ? 1 : 0, p.w, t < p.invUntil ? 1 : 0, stats[p.id].k, stats[p.id].d, p.cr ? 1 : 0, p.armor > 0 ? 1 : 0, p.maxHp,
     ]),
+    bl: botLevel,
     an: animals.map((a) => [a.id, a.t, r2(a.x), r2(a.z), r2(a.yaw), Math.round((100 * a.hp) / ANIMALS[a.t].hp), a.alive ? a.st : -1]),
     gr: grenades.map((g) => [g.id, g.type, r2(g.x), r2(g.y), r2(g.z)]),
   };
@@ -594,8 +723,8 @@ setInterval(() => {
 // ---------------- WebSocket ----------------
 function lobbyMsg() {
   return {
-    t: 'lobby', names: NAMES, taken: players.map((p, i) => (p && p.ws.readyState === 1 ? i : -1)).filter((i) => i >= 0),
-    map: MAP.id, want: wantMap, mode, wmode: wantMode, tot,
+    t: 'lobby', names: NAMES, taken: players.map((p, i) => (p && !p.bot && p.ws.readyState === 1 ? i : -1)).filter((i) => i >= 0),
+    map: MAP.id, want: wantMap, mode, wmode: wantMode, tot, bl: botLevel, wbl: wantBot,
   };
 }
 const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
@@ -630,6 +759,7 @@ setInterval(() => {
   }
 }, 6000);
 
+spawnBots();
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`Sariq Hovli serveri ishga tushdi: http://localhost:${PORT}`);
 });

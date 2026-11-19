@@ -1,5 +1,5 @@
 // Hayvonlar (buqa va cho'chqa): maydonda erkin yuradi. Buqa yaqin kelganni suzadi, cho'chqa o'qdan qochadi.
-import { BOXES, ARENA, ANIMAL_SPAWNS } from '../client/shared/map.js';
+import { boxesNear, ARENA, ANIMAL_SPAWNS } from '../client/shared/map.js';
 import { ANIMALS, ANIMAL_RESPAWN_MS, AS } from '../client/shared/consts.js';
 
 export const animals = [];
@@ -7,8 +7,9 @@ export const animals = [];
 // (x,z) markazli, r radiusli doira yerdagi to'siqqa tegadimi (pastki zinalar 0.35 gacha o'tiladi)
 function blocked(x, z, r) {
   if (Math.abs(x) > ARENA.x - 0.6 || Math.abs(z) > ARENA.z - 0.6) return true;
-  for (let i = 0; i < BOXES.length; i++) {
-    const b = BOXES[i];
+  const BX = boxesNear(x - r, z - r, x + r, z + r);
+  for (let i = 0; i < BX.length; i++) {
+    const b = BX[i];
     if (b.maxy > 0.35 && b.miny < 1.3 && x + r > b.minx && x - r < b.maxx && z + r > b.minz && z - r < b.maxz) return true;
   }
   return false;
